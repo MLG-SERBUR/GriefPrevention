@@ -1713,9 +1713,13 @@ class PlayerEventHandler implements Listener
                     || materialInHand == Material.INK_SAC
                     || materialInHand == Material.GLOW_INK_SAC
                     || materialInHand == Material.HONEYCOMB
+                    || materialInHand == Material.SULFUR_CUBE_BUCKET
                     || dyes.contains(materialInHand)))
             {
-                Supplier<String> noBuildReason = ProtectionHelper.checkPermission(player, event.getClickedBlock().getLocation(), ClaimPermission.Build, event);
+                Block targetBlock = materialInHand == Material.SULFUR_CUBE_BUCKET
+                        ? clickedBlock.getRelative(event.getBlockFace())
+                        : clickedBlock;
+                Supplier<String> noBuildReason = ProtectionHelper.checkPermission(player, targetBlock.getLocation(), ClaimPermission.Build, event);
                 if (noBuildReason != null)
                 {
                     GriefPrevention.sendMessage(player, TextMode.Err, noBuildReason.get());
