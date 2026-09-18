@@ -2,13 +2,16 @@ package me.ryanhamshire.GriefPrevention;
 
 import com.griefprevention.test.ServerMocks;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Raid;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.entity.AbstractHorse;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.raid.RaidTriggerEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.HorseInventory;
 import org.bukkit.inventory.ItemStack;
@@ -20,11 +23,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.function.Supplier;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 @SuppressWarnings("null")
 public class PlayerInteractEntityEventHandlerTest
@@ -94,5 +100,42 @@ public class PlayerInteractEntityEventHandlerTest
 
         verify(inventory, never()).clear();
         verify(horse, never()).setOwner(null);
+    }
+
+    @Test
+    void raidTriggerUsesRaidLocationWhenPlayerLeavesClaim()
+    {
+        DataStore dataStore = mock(DataStore.class);
+        when(dataStore.getPlayerData(PLAYER_ID)).thenReturn(new PlayerData());
+
+        GriefPrevention plugin = mock(GriefPrevention.class);
+        plugin.dataStore = dataStore;
+        plugin.config_claims_raidTriggersRequireBuildTrust = true;
+        plugin.config_pvp_blockedCommands = new ArrayList<>();
+        plugin.config_claims_commandsRequiringAccessTrust = new ArrayList<>();
+        plugin.config_spam_monitorSlashCommands = new ArrayList<>();
+        plugin.config_eavesdrop_whisperCommands = new ArrayList<>();
+        when(plugin.getLogger()).thenReturn(mock(Logger.class));
+        GriefPrevention.instance = plugin;
+
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(PLAYER_ID);
+        Location playerLocation = mock(Location.class);
+        when(player.getLocation()).thenReturn(playerLocation);
+
+        Location raidLocation = mock(Location.class);
+        Raid raid = mock(Raid.class);
+        when(raid.getLocation()).thenReturn(raidLocation);
+        Claim claim = mock(Claim.class);
+        when(dataStore.getClaimAt(raidLocation, false, null)).thenReturn(claim);
+
+        RaidTriggerEvent event = mock(RaidTriggerEvent.class);
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getRaid()).thenReturn(raid);
+        when(claim.checkPermission(eq(player), eq(ClaimPermission.Build), any())).thenReturn(mock(Supplier.class));
+
+        new PlayerEventHandler(dataStore, plugin).onPlayerTriggerRaid(event);
+
+        verify(event).setCancelled(true);
     }
 }

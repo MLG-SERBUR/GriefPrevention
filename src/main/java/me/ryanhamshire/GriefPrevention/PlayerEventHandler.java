@@ -1042,16 +1042,27 @@ class PlayerEventHandler implements Listener
 
         Player player = event.getPlayer();
         PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
+        Location playerLocation = player.getLocation();
+        Location raidLocation = event.getRaid().getLocation();
+        instance.getLogger().info("Raid trigger: player=" + player.getName()
+                + " playerLocation=" + playerLocation + " raidLocation=" + raidLocation);
 
-        Claim claim = this.dataStore.getClaimAt(player.getLocation(), false, playerData.lastClaim);
+        Claim claim = this.dataStore.getClaimAt(raidLocation, false, playerData.lastClaim);
         if (claim == null)
+        {
+            instance.getLogger().info("Raid trigger allowed: no claim at raid location.");
             return;
+        }
 
         playerData.lastClaim = claim;
         if (claim.checkPermission(player, ClaimPermission.Build, event) == null)
+        {
+            instance.getLogger().info("Raid trigger allowed: player has build permission.");
             return;
+        }
 
         event.setCancelled(true);
+        instance.getLogger().info("Raid trigger cancelled: player lacks build permission.");
     }
 
     //when a player interacts with a specific part of entity...
