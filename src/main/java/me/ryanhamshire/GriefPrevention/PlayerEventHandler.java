@@ -1482,19 +1482,8 @@ class PlayerEventHandler implements Listener
         {
             if (clickedBlockType != Material.TURTLE_EGG)
                 return;
-            playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
-            {
-                playerData.lastClaim = claim;
-
-                Supplier<String> noAccessReason = claim.checkPermission(player, ClaimPermission.Build, event);
-                if (noAccessReason != null)
-                {
-                    event.setCancelled(true);
-                    return;
-                }
-            }
+            if (!ProtectionHelper.checkClaimedAction(player, clickedBlock.getLocation(), ClaimPermission.Build, event).allowed())
+                event.setCancelled(true);
             return;
         }
 
@@ -1535,28 +1524,24 @@ class PlayerEventHandler implements Listener
         {
             if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
-            //check if player is in a claim for pvp and permission checks below
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-
             //block container use during pvp combat in claimed areas, same reason as above, so players
             //can't hide items from attackers
-            if (playerData.inPvpCombat() && claim != null)
+            if (playerData.inPvpCombat()
+                    && this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim) != null)
             {
                 GriefPrevention.sendMessage(player, TextMode.Err, Messages.PvPNoContainers);
                 event.setCancelled(true);
                 return;
             }
-            if (claim != null)
-            {
-                playerData.lastClaim = claim;
 
-                Supplier<String> noContainersReason = claim.checkPermission(player, ClaimPermission.Container, event);
-                if (noContainersReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noContainersReason.get());
-                    return;
-                }
+            ProtectionHelper.ClaimDecision containerDecision = ProtectionHelper.checkClaimedAction(
+                    player, clickedBlock.getLocation(), ClaimPermission.Container, event);
+            if (!containerDecision.allowed()
+                    && containerDecision.denial() != null && !containerDecision.denial().get().isEmpty())
+            {
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, containerDecision.denial().get());
+                return;
             }
 
             //if the event hasn't been cancelled, then the player is allowed to use the container
@@ -1581,57 +1566,42 @@ class PlayerEventHandler implements Listener
 
                 instance.config_claims_lockFenceGates && Tag.FENCE_GATES.isTagged(clickedBlockType)))
         {
-            if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision doorsDecision = ProtectionHelper.checkClaimedAction(
+                    player, clickedBlock.getLocation(), ClaimPermission.Access, event);
+            if (!doorsDecision.allowed()
+                    && doorsDecision.denial() != null && !doorsDecision.denial().get().isEmpty())
             {
-                playerData.lastClaim = claim;
-
-                Supplier<String> noAccessReason = claim.checkPermission(player, ClaimPermission.Access, event);
-                if (noAccessReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noAccessReason.get());
-                    return;
-                }
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, doorsDecision.denial().get());
+                return;
             }
         }
 
         //otherwise apply rules for buttons and switches
         else if (clickedBlock != null && instance.config_claims_preventButtonsSwitches && (Tag.BUTTONS.isTagged(clickedBlockType) || clickedBlockType == Material.LEVER))
         {
-            if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision buttonsDecision = ProtectionHelper.checkClaimedAction(
+                    player, clickedBlock.getLocation(), ClaimPermission.Access, event);
+            if (!buttonsDecision.allowed()
+                    && buttonsDecision.denial() != null && !buttonsDecision.denial().get().isEmpty())
             {
-                playerData.lastClaim = claim;
-
-                Supplier<String> noAccessReason = claim.checkPermission(player, ClaimPermission.Access, event);
-                if (noAccessReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noAccessReason.get());
-                    return;
-                }
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, buttonsDecision.denial().get());
+                return;
             }
         }
 
         //otherwise apply rule for cake
         else if (clickedBlock != null && instance.config_claims_preventTheft && (clickedBlockType == Material.CAKE || Tag.CANDLE_CAKES.isTagged(clickedBlockType)))
         {
-            if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision cakeDecision = ProtectionHelper.checkClaimedAction(
+                    player, clickedBlock.getLocation(), ClaimPermission.Access, event);
+            if (!cakeDecision.allowed()
+                    && cakeDecision.denial() != null && !cakeDecision.denial().get().isEmpty())
             {
-                playerData.lastClaim = claim;
-
-                Supplier<String> noContainerReason = claim.checkPermission(player, ClaimPermission.Access, event);
-                if (noContainerReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noContainerReason.get());
-                    return;
-                }
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, cakeDecision.denial().get());
+                return;
             }
         }
 
@@ -1646,20 +1616,17 @@ class PlayerEventHandler implements Listener
                                 clickedBlockType == Material.REDSTONE_WIRE ||
                                 Tag.FLOWER_POTS.isTagged(clickedBlockType) ||
                                 Tag.CANDLES.isTagged(clickedBlockType) ||
-                                Tag.COPPER_GOLEM_STATUES.isTagged(clickedBlockType)
+                                 Tag.COPPER_GOLEM_STATUES.isTagged(clickedBlockType)
                 ))
         {
-            if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision decorDecision = ProtectionHelper.checkClaimedAction(
+                    player, clickedBlock.getLocation(), ClaimPermission.Build, event);
+            if (!decorDecision.allowed()
+                    && decorDecision.denial() != null && !decorDecision.denial().get().isEmpty())
             {
-                Supplier<String> noBuildReason = claim.checkPermission(player, ClaimPermission.Build, event);
-                if (noBuildReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noBuildReason.get());
-                    return;
-                }
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, decorDecision.denial().get());
+                return;
             }
         }
 
@@ -2162,18 +2129,13 @@ class PlayerEventHandler implements Listener
     void onTakeBook(PlayerTakeLecternBookEvent event)
     {
         Player player = event.getPlayer();
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-        Claim claim = this.dataStore.getClaimAt(event.getLectern().getLocation(), false, playerData.lastClaim);
-        if (claim != null)
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                player, event.getLectern().getLocation(), ClaimPermission.Container, event);
+        if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
         {
-            playerData.lastClaim = claim;
-            Supplier<String> noContainerReason = claim.checkPermission(player, ClaimPermission.Container, event);
-            if (noContainerReason != null)
-            {
-                event.setCancelled(true);
-                player.closeInventory();
-                GriefPrevention.sendMessage(player, TextMode.Err, noContainerReason.get());
-            }
+            event.setCancelled(true);
+            player.closeInventory();
+            GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
         }
     }
 
