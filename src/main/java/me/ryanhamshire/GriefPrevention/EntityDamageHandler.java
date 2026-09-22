@@ -1,5 +1,6 @@
 package me.ryanhamshire.GriefPrevention;
 
+import com.griefprevention.protection.ProtectionHelper;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -304,33 +305,22 @@ public class EntityDamageHandler implements Listener
             return true;
         }
 
-        // Use attacker's cached claim to speed up lookup.
-        Claim cachedClaim = null;
-        if (attacker != null)
-        {
-            PlayerData playerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-            cachedClaim = playerData.lastClaim;
-        }
+        // Single funnel owns claim lookup, same-claim dispenser allow, and player check.
+        // Dispensers in the same claim may harm these (farms, not grief).
+        // Tamed pets stay protected by ownership, so they are not listed in the type gate above.
+        ProtectionHelper.ClaimDecision decision =
+                ProtectionHelper.checkClaimedAction(
+                        ProtectionHelper.resolveSource(event.damager(), attacker),
+                        event.damaged().getLocation(),
+                        ClaimPermission.Build,
+                        event.original());
 
-        Claim claim = this.dataStore.getClaimAt(event.damaged().getLocation(), false, cachedClaim);
-
-        // If the area is not claimed, do not handle.
-        if (claim == null) return false;
-
-        // If attacker isn't a player, cancel.
-        if (attacker == null)
-        {
-            event.setCancelled(true);
-            return true;
-        }
-
-        Supplier<String> failureReason = claim.checkPermission(attacker, ClaimPermission.Build, event.original());
-
-        // If player has build trust, fall through to next checks.
-        if (failureReason == null) return false;
+        // Allowed (trusted player, same-claim dispenser, or wilderness): fall through to next checks.
+        if (decision.allowed()) return false;
 
         event.setCancelled(true);
-        if (sendMessages) GriefPrevention.sendMessage(attacker, TextMode.Err, failureReason.get());
+        if (attacker != null && sendMessages && decision.denial() != null && !decision.denial().get().isEmpty())
+            GriefPrevention.sendMessage(attacker, TextMode.Err, decision.denial().get());
         return true;
     }
 
@@ -376,59 +366,49 @@ public class EntityDamageHandler implements Listener
             return true;
         }
 
-        Claim cachedClaim = null;
-        PlayerData playerData = null;
-        if (attacker != null)
-        {
-            playerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-            cachedClaim = playerData.lastClaim;
-        }
+        // Ownership beats the farm rule: tamed pets stay denied even for same-claim dispensers.
+        ProjectileSource source = ProtectionHelper.resolveSource(damageSource, attacker);
+        if (event.damaged() instanceof Tameable tameable && tameable.isTamed())
+            source = null;
 
-        Claim claim = this.dataStore.getClaimAt(event.damaged().getLocation(), false, cachedClaim);
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                source, event.damaged().getLocation(), ClaimPermission.Container, event.original());
 
-        // Require a claim to handle.
-        if (claim == null) return false;
+        // Allowed (trusted player, same-claim dispenser, or wilderness): handled, stop the chain.
+        if (decision.allowed()) return true;
 
-        // If damaged by anything other than a player, cancel the event.
+        event.setCancelled(true);
+
+        // Always remove projectiles shot by non-players, ground player ones to stop infinite bounce.
         if (attacker == null)
         {
-            event.setCancelled(true);
-            // Always remove projectiles shot by non-players.
             if (arrow != null) arrow.remove();
             return true;
         }
-
-        //cache claim for later
-        playerData.lastClaim = claim;
+        preventInfiniteBounce(arrow, event.damaged());
 
         // Do not message players about fireworks to prevent spam due to multi-hits.
         sendMessages &= damageSourceType != EntityType.FIREWORK_ROCKET;
 
-        Supplier<String> override = null;
         if (sendMessages)
         {
             final Player finalAttacker = attacker;
-            override = () ->
+            final Claim deniedClaim = decision.claim();
+            final Supplier<String> defaultDenial = decision.denial();
+            String message;
+            if (deniedClaim != null)
             {
-                String message = dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
+                message = dataStore.getMessage(Messages.NoDamageClaimedEntity, deniedClaim.getOwnerName());
                 if (finalAttacker.hasPermission("griefprevention.ignoreclaims"))
                     message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-                return message;
-            };
+            }
+            else if (defaultDenial != null && !defaultDenial.get().isEmpty())
+            {
+                message = defaultDenial.get();
+            }
+            else return true;
+            GriefPrevention.sendMessage(attacker, TextMode.Err, message);
         }
-
-        // Check for permission to access containers.
-        Supplier<String> noContainersReason = claim.checkPermission(attacker, ClaimPermission.Container, event.original(), override);
-
-        // If player has permission, action is allowed.
-        if (noContainersReason == null) return true;
-
-        event.setCancelled(true);
-
-        // Prevent projectiles from bouncing infinitely.
-        preventInfiniteBounce(arrow, event.damaged());
-
-        if (sendMessages) GriefPrevention.sendMessage(attacker, TextMode.Err, noContainersReason.get());
 
         return true;
     }
@@ -635,7 +615,7 @@ public class EntityDamageHandler implements Listener
                             if (thrower == null)
                             {
                                 // Non-player source: Witches, dispensers, etc.
-                                if (!EntityEventHandler.isBlockSourceInClaim(projectileSource, claim))
+                                if (!ProtectionHelper.isBlockSourceInClaim(projectileSource, claim))
                                 {
                                     // If the source is not a block in the same claim as the affected entity, disallow.
                                     event.setIntensity(affected, 0);

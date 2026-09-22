@@ -12,13 +12,19 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.Event;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.projectiles.BlockProjectileSource;
+import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -28,6 +34,87 @@ public final class ProtectionHelper
 {
 
     private ProtectionHelper() {}
+
+    /**
+     * Blocks a projectile can break without an {@code EntityChangeBlockEvent}.
+     * Single home so new MC blocks need one edit here, not one per handler.
+     */
+    public static final Set<Material> PROJECTILE_BREAKABLE_BLOCKS = Set.copyOf(EnumSet.of(
+            Material.CHORUS_FLOWER,
+            Material.DECORATED_POT));
+
+    /**
+     * Result of {@link #checkClaimedAction}: denial plus the claim that denied,
+     * so callers with custom messages (owner name) keep them without looking up the claim twice.
+     */
+    public record ClaimDecision(@Nullable Supplier<String> denial, @Nullable Claim claim)
+    {
+        public boolean allowed()
+        {
+            return denial == null;
+        }
+    }
+
+    /**
+     * Check whether a dispenser (or other block source) sits in the same claim.
+     * Moved from EntityEventHandler so all guards share one funnel.
+     */
+    public static boolean isBlockSourceInClaim(@Nullable ProjectileSource projectileSource, @Nullable Claim claim)
+    {
+        return projectileSource instanceof BlockProjectileSource &&
+                GriefPrevention.instance.dataStore.getClaimAt(((BlockProjectileSource) projectileSource).getBlock().getLocation(), false, claim) == claim;
+    }
+
+    /**
+     * Resolve the ultimate source behind a causing entity: the attacking player,
+     * a projectile's shooter, a block source, or null when unknown.
+     */
+    public static @Nullable ProjectileSource resolveSource(@Nullable Entity cause, @Nullable Player attacker)
+    {
+        if (attacker != null) return attacker;
+        if (cause instanceof Projectile projectile) return projectile.getShooter();
+        if (cause instanceof ProjectileSource source) return source;
+        return null;
+    }
+
+    /**
+     * Single permission check for claimed actions caused by players, dispensers, or mobs.
+     * Owns the world gate, claim lookup, same-claim dispenser allow, and player delegation.
+     * Guards only resolve (source, target, permission); all claim logic lives here.
+     * Wilderness allows, matching the damage/hanging/projectile-hit guards
+     * (block-change keeps its own creative gate and does not use this).
+     *
+     * @param source the cause (player, dispenser block source, mob, or null)
+     * @param target the harmed block or entity location
+     * @param permission the required permission
+     * @param trigger the triggering event, if any
+     * @return the decision; non-player denials carry no message
+     */
+    public static @NotNull ClaimDecision checkClaimedAction(
+            @Nullable ProjectileSource source,
+            @NotNull Location target,
+            @NotNull ClaimPermission permission,
+            @Nullable Event trigger)
+    {
+        World world = target.getWorld();
+        if (world == null || !GriefPrevention.instance.claimsEnabledForWorld(world))
+            return new ClaimDecision(null, null);
+
+        if (source instanceof Player player)
+        {
+            Supplier<String> denial = checkPermission(player, target, permission, trigger);
+            // Extra lookup only on deny (rare) so custom messages keep the owner name.
+            Claim deniedClaim = denial == null ? null : GriefPrevention.instance.dataStore.getClaimAt(target, false, null);
+            return new ClaimDecision(denial, deniedClaim);
+        }
+
+        Claim claim = GriefPrevention.instance.dataStore.getClaimAt(target, false, null);
+        if (claim == null) return new ClaimDecision(null, null);
+
+        if (isBlockSourceInClaim(source, claim)) return new ClaimDecision(null, claim);
+
+        return new ClaimDecision(() -> "", claim);
+    }
 
     /**
      * Check the {@link ClaimPermission} state for a {@link Player} at a particular {@link Location}.

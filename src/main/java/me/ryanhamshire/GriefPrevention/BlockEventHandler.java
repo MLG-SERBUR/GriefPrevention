@@ -1125,34 +1125,20 @@ public class BlockEventHandler implements Listener
 
         Block block = event.getHitBlock();
 
-        // Ensure projectile affects block.
-        if (block == null || (block.getType() != Material.CHORUS_FLOWER  && block.getType() != Material.DECORATED_POT))
+        // Ensure projectile affects block. New MC blocks go in
+        // ProtectionHelper.PROJECTILE_BREAKABLE_BLOCKS, no edit here.
+        if (block == null || !ProtectionHelper.PROJECTILE_BREAKABLE_BLOCKS.contains(block.getType()))
             return;
 
-        Claim claim = dataStore.getClaimAt(block.getLocation(), false, null);
-        if (claim == null)
-            return;
-
-        Player shooter = null;
         Projectile projectile = event.getEntity();
+        ProjectileSource source = projectile.getShooter();
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                source, block.getLocation(), ClaimPermission.Container, event);
+        if (decision.allowed()) return;
 
-        if (projectile.getShooter() instanceof Player)
-            shooter = (Player) projectile.getShooter();
-
-        if (shooter == null)
-        {
-            event.setCancelled(true);
-            return;
-        }
-
-        Supplier<String> allowContainer = claim.checkPermission(shooter, ClaimPermission.Container, event);
-
-        if (allowContainer != null)
-        {
-            event.setCancelled(true);
-            GriefPrevention.sendMessage(shooter, TextMode.Err, allowContainer.get());
-            return;
-        }
+        event.setCancelled(true);
+        if (source instanceof Player shooter && decision.denial() != null && !decision.denial().get().isEmpty())
+            GriefPrevention.sendMessage(shooter, TextMode.Err, decision.denial().get());
     }
 
     //ensures dispensers can't be used to dispense a block(like water or lava) or item across a claim boundary
