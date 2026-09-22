@@ -1,12 +1,10 @@
 package me.ryanhamshire.GriefPrevention;
 
-import me.ryanhamshire.GriefPrevention.events.PreventPvPEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Animals;
-import org.bukkit.entity.AreaEffectCloud;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Donkey;
 import org.bukkit.entity.Entity;
@@ -52,11 +50,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class EntityDamageHandler implements Listener
@@ -162,32 +158,6 @@ public class EntityDamageHandler implements Listener
             }
         }
 
-        // Specific handling for PVP-enabled situations.
-        if (instance.pvpRulesApply(event.damaged().getWorld()))
-        {
-            if (event.damaged() instanceof Player defender)
-            {
-                // Protect players from other players' pets when protected from PVP.
-                if (handlePvpDamageByPet(event, attacker, defender)) return;
-
-                // Protect players from lingering splash potions when protected from PVP.
-                if (handlePvpDamageByLingeringPotion(event, attacker, defender)) return;
-
-                // Handle regular PVP with an attacker and defender.
-                if (attacker != null && handlePvpDamageByPlayer(event, attacker, defender, sendMessages))
-                {
-                    return;
-                }
-            }
-            else if (event.damaged() instanceof Tameable tameable)
-            {
-                if (attacker != null && handlePvpPetDamageByPlayer(event, tameable, attacker, sendMessages))
-                {
-                    return;
-                }
-            }
-        }
-
         //don't track in worlds where claims are not enabled
         if (!instance.claimsEnabledForWorld(event.damaged().getWorld())) return;
 
@@ -241,9 +211,8 @@ public class EntityDamageHandler implements Listener
      */
     private boolean handlePetDamageByEnvironment(@NotNull EntityDamageInstance event)
     {
-        // If PVP is enabled, the damaged entity is not a pet, or the pet has no owner, allow.
-        if (instance.pvpRulesApply(event.damaged().getWorld())
-                || !(event.damaged() instanceof Tameable tameable)
+        // If the damaged entity is not a pet, or the pet has no owner, allow.
+        if (!(event.damaged() instanceof Tameable tameable)
                 || !tameable.isTamed())
         {
             return false;
@@ -283,7 +252,7 @@ public class EntityDamageHandler implements Listener
 
         Entity entity = event.damaged();
 
-        // Skip players - does allow players to use block explosions to bypass PVP protections,
+        // Skip players - allows players to use block explosions for combat,
         // but also doesn't disable self-damage.
         if (entity instanceof Player) return false;
 
@@ -293,249 +262,6 @@ public class EntityDamageHandler implements Listener
         if (claim == null) return false;
 
         event.setCancelled(true);
-        return true;
-    }
-
-    /**
-     * Handle PVP damage caused by a lingering splash potion.
-     *
-     * <p>For logical simplicity, this method does not check the state of the PVP rules. PVP rules should be confirmed
-     * to be enabled before calling this method.
-     *
-     * @param event the {@link EntityDamageInstance}
-     * @param attacker the attacking {@link Player}, if any
-     * @param damaged the defending {@link Player}
-     * @return true if the damage is handled
-     */
-    private boolean handlePvpDamageByLingeringPotion(
-            @NotNull EntityDamageInstance event,
-            @Nullable Player attacker,
-            @NotNull Player damaged)
-    {
-        if (!(event.damager() instanceof AreaEffectCloud)) return false;
-
-        PlayerData damagedData = dataStore.getPlayerData(damaged.getUniqueId());
-
-        //case 1: recently spawned
-        if (instance.config_pvp_protectFreshSpawns && damagedData.pvpImmune)
-        {
-            event.setCancelled(true);
-            return true;
-        }
-
-        //case 2: in a pvp safe zone
-        Claim damagedClaim = dataStore.getClaimAt(damaged.getLocation(), false, damagedData.lastClaim);
-        if (damagedClaim != null)
-        {
-            damagedData.lastClaim = damagedClaim;
-            if (instance.claimIsPvPSafeZone(damagedClaim))
-            {
-                PreventPvPEvent pvpEvent = new PreventPvPEvent(damagedClaim, attacker, damaged);
-                Bukkit.getPluginManager().callEvent(pvpEvent);
-                if (!pvpEvent.isCancelled())
-                {
-                    event.setCancelled(true);
-                }
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * General PVP handler.
-     *
-     * @param event the {@link EntityDamageInstance}
-     * @param attacker the attacking {@link Player}
-     * @param defender the defending {@link Player}
-     * @param sendMessages whether to send denial messages to users involved
-     * @return true if the damage is handled
-     */
-    private boolean handlePvpDamageByPlayer(
-            @NotNull EntityDamageInstance event,
-            @NotNull Player attacker,
-            @NotNull Player defender,
-            boolean sendMessages)
-    {
-        if (attacker == defender) return false;
-
-        PlayerData defenderData = this.dataStore.getPlayerData(defender.getUniqueId());
-        PlayerData attackerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-
-        //FEATURE: prevent pvp in the first minute after spawn and when one or both players have no inventory
-        if (instance.config_pvp_protectFreshSpawns)
-        {
-            if (attackerData.pvpImmune || defenderData.pvpImmune)
-            {
-                event.setCancelled(true);
-                if (sendMessages)
-                    GriefPrevention.sendMessage(
-                            attacker,
-                            TextMode.Err,
-                            attackerData.pvpImmune ? Messages.CantFightWhileImmune : Messages.ThatPlayerPvPImmune);
-                return true;
-            }
-        }
-
-        //FEATURE: prevent players from engaging in PvP combat inside land claims (when it's disabled)
-        // Ignoring claims bypasses this feature.
-        if (attackerData.ignoreClaims
-                || !instance.config_pvp_noCombatInPlayerLandClaims
-                && !instance.config_pvp_noCombatInAdminLandClaims)
-        {
-            return false;
-        }
-        Consumer<Messages> cancelHandler = message ->
-        {
-            event.setCancelled(true);
-            if (sendMessages) GriefPrevention.sendMessage(attacker, TextMode.Err, message);
-        };
-        // Return whether PVP is handled by a claim at the attacker or defender's locations.
-        return handlePvpInClaim(attacker, defender, attacker.getLocation(), attackerData, () -> cancelHandler.accept(Messages.CantFightWhileImmune))
-                || handlePvpInClaim(attacker, defender, defender.getLocation(), defenderData, () -> cancelHandler.accept(Messages.PlayerInPvPSafeZone));
-    }
-
-    /**
-     * Handle PVP damage caused by an owned pet.
-     *
-     * @param event the {@link EntityDamageInstance}
-     * @param attacker the attacking {@link Player}, if any
-     * @return true if the damage is handled
-     */
-    private boolean handlePvpDamageByPet(
-            @NotNull EntityDamageInstance event,
-            @Nullable Player attacker,
-            @NotNull Player defender)
-    {
-        if (!(event.damager() instanceof Tameable pet) || !pet.isTamed() || pet.getOwner() == null) return false;
-
-        PlayerData defenderData = dataStore.getPlayerData(defender.getUniqueId());
-        Runnable cancelHandler = () ->
-        {
-            event.setCancelled(true);
-            pet.setTarget(null);
-        };
-
-        // If the defender is PVP-immune, prevent the attack.
-        if (defenderData.pvpImmune)
-        {
-            cancelHandler.run();
-            return true;
-        }
-
-        // Return whether PVP is handled by a claim at the defender's location.
-        return handlePvpInClaim(attacker, defender, defender.getLocation(), defenderData, cancelHandler);
-    }
-
-    /**
-     * Handle PVP damage to an owned pet.
-     *
-     * @param event the {@link EntityDamageInstance}
-     * @param pet the potential pet being damaged
-     * @param attacker the attacking {@link Player}
-     * @param sendMessages whether to send denial messages to users involved
-     * @return true if the damage is handled
-     */
-    private boolean handlePvpPetDamageByPlayer(
-            @NotNull EntityDamageInstance event,
-            @NotNull Tameable pet,
-            @NotNull Player attacker,
-            boolean sendMessages)
-    {
-
-        if (!pet.isTamed()) return false;
-
-        AnimalTamer owner = pet.getOwner();
-        if (owner == null) return false;
-
-        // If the player interacting is the owner, always allow.
-        if (attacker.equals(owner)) return true;
-
-        // Allow admin override.
-        PlayerData attackerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-        if (attackerData.ignoreClaims) return true;
-
-        // Disallow provocations while PVP-immune.
-        if (attackerData.pvpImmune)
-        {
-            event.setCancelled(true);
-            if (sendMessages)
-                GriefPrevention.sendMessage(attacker, TextMode.Err, Messages.CantFightWhileImmune);
-            return true;
-        }
-
-        // Wolves are exempt from pet protections in PVP worlds when their target is the attacker
-        if (event.damaged().getType() == EntityType.WOLF && pet.getTarget() == attacker) return true;
-
-        Claim claim;
-        // Note: Internal name is not descriptive. Actual node is "GriefPrevention.PVP.ProtectPetsOutsideLandClaims"
-        if (!instance.config_pvp_protectPets)
-        {
-            claim = dataStore.getClaimAt(event.damaged().getLocation(), false, attackerData.lastClaim);
-            if (claim == null)
-            {
-                // Pet is not in a claim, allow attack.
-                return true;
-            }
-            attackerData.lastClaim = claim;
-        }
-        else
-        {
-            // Create a dummy claim to signify blanket pet protection.
-            claim = new Claim(event.damaged().getLocation(), event.damaged().getLocation(), null, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), null);
-        }
-
-        PreventPvPEvent pvpEvent = new PreventPvPEvent(claim, attacker, pet);
-        Bukkit.getPluginManager().callEvent(pvpEvent);
-        if (!pvpEvent.isCancelled())
-        {
-            event.setCancelled(true);
-            if (sendMessages)
-            {
-                String ownerName = GriefPrevention.lookupPlayerName(owner);
-                String message = dataStore.getMessage(Messages.NoDamageClaimedEntity, ownerName);
-                if (attacker.hasPermission("griefprevention.ignoreclaims"))
-                    message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-                GriefPrevention.sendMessage(attacker, TextMode.Err, message);
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Handle a PVP action depending on configured rules. Fires a {@link PreventPvPEvent} to allow addons to change
-     * default behavior.
-     *
-     * @param attacker the attacking {@link Player}, or null for indirect PVP like pet-induced damage
-     * @param defender the defending {@link Player}
-     * @param location the {@link Location} to be checked
-     * @param playerData the {@link PlayerData} used for caching last claim
-     * @param cancelHandler the {@link Runnable} to run if PVP is disallowed
-     * @return true if PVP is handled by claim rules
-     */
-    private boolean handlePvpInClaim(
-            @Nullable Player attacker,
-            @NotNull Player defender,
-            @NotNull Location location,
-            @NotNull PlayerData playerData,
-            @NotNull Runnable cancelHandler)
-    {
-        if (playerData.inPvpCombat()) return false;
-
-        Claim claim = this.dataStore.getClaimAt(location, false, playerData.lastClaim);
-
-        if (claim == null || !instance.claimIsPvPSafeZone(claim)) return false;
-
-        playerData.lastClaim = claim;
-        PreventPvPEvent pvpEvent = new PreventPvPEvent(claim, attacker, defender);
-        Bukkit.getPluginManager().callEvent(pvpEvent);
-
-        //if other plugins aren't making an exception to the rule
-        if (!pvpEvent.isCancelled())
-        {
-            cancelHandler.run();
-        }
         return true;
     }
 
@@ -783,44 +509,6 @@ public class EntityDamageHandler implements Listener
         }
     }
 
-    // Flag players engaging in PVP.
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onEntityDamageByEntityMonitor(@NotNull EntityDamageByEntityEvent event)
-    {
-        //FEATURE: prevent players who very recently participated in pvp combat from hiding inventory to protect it from looting
-        //FEATURE: prevent players who are in pvp combat from logging out to avoid being defeated
-
-        // If there is no damage (snowballs, eggs, etc.) or the defender is not a player in a PVP world, do nothing.
-        if (event.getDamage() == 0
-                || !(event.getEntity() instanceof Player defender)
-                || !instance.pvpRulesApply(defender.getWorld())) return;
-
-        //determine which player is attacking, if any
-        Player attacker = null;
-        Entity damageSource = event.getDamager();
-
-        if (damageSource instanceof Player damager)
-        {
-            attacker = damager;
-        }
-        else if (damageSource instanceof Projectile arrow && arrow.getShooter() instanceof Player shooter)
-        {
-            attacker = shooter;
-        }
-
-        // If not PVP or attacking self, do nothing.
-        if (attacker == null || attacker == defender) return;
-
-        PlayerData defenderData = this.dataStore.getPlayerData(defender.getUniqueId());
-        PlayerData attackerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-
-        long now = Calendar.getInstance().getTimeInMillis();
-        defenderData.lastPvpTimestamp = now;
-        defenderData.lastPvpPlayer = attacker.getName();
-        attackerData.lastPvpTimestamp = now;
-        attackerData.lastPvpPlayer = defender.getName();
-    }
-
     //when a vehicle is damaged
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
     public void onVehicleDamage(@NotNull VehicleDamageEvent event)
@@ -972,39 +660,6 @@ public class EntityDamageHandler implements Listener
                 }
             }
 
-            //Otherwise, ignore potions not thrown by players
-            if (thrower == null) return;
-
-            //otherwise, no restrictions for positive effects
-            if (effectType.getCategory() == PotionEffectTypeCategory.BENEFICIAL) continue;
-
-            for (LivingEntity affected : event.getAffectedEntities())
-            {
-                //always impact the thrower
-                if (affected == thrower) continue;
-
-                //always impact non players
-                if (!(affected instanceof Player affectedPlayer)) continue;
-
-                //otherwise if in no-pvp zone, stop effect
-                //FEATURE: prevent players from engaging in PvP combat inside land claims (when it's disabled)
-                if (instance.config_pvp_noCombatInPlayerLandClaims || instance.config_pvp_noCombatInAdminLandClaims)
-                {
-                    PlayerData playerData = this.dataStore.getPlayerData(thrower.getUniqueId());
-                    Consumer<Messages> cancelHandler = message ->
-                    {
-                        event.setIntensity(affected, 0);
-                        if (messagedPlayer.compareAndSet(false, true))
-                            GriefPrevention.sendMessage(thrower, TextMode.Err, message);
-                    };
-                    if (handlePvpInClaim(thrower, affectedPlayer, thrower.getLocation(), playerData, () -> cancelHandler.accept(Messages.CantFightWhileImmune)))
-                    {
-                        continue;
-                    }
-                    playerData = this.dataStore.getPlayerData(affectedPlayer.getUniqueId());
-                    handlePvpInClaim(thrower, affectedPlayer, affectedPlayer.getLocation(), playerData, () -> cancelHandler.accept(Messages.PlayerInPvPSafeZone));
-                }
-            }
         }
     }
 

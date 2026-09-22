@@ -5,11 +5,8 @@ import me.ryanhamshire.GriefPrevention.ClaimPermission;
 import me.ryanhamshire.GriefPrevention.DataStore;
 import me.ryanhamshire.GriefPrevention.EntityDamageHandler;
 import me.ryanhamshire.GriefPrevention.GriefPrevention;
-import me.ryanhamshire.GriefPrevention.Messages;
 import me.ryanhamshire.GriefPrevention.PlayerData;
 import me.ryanhamshire.GriefPrevention.TextMode;
-import me.ryanhamshire.GriefPrevention.events.PreventPvPEvent;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Entity;
@@ -45,8 +42,8 @@ public abstract class KnockbackProtectionHandler implements Listener
     }
 
     /**
-     * Handle player-caused knockback against other players. Applies GP PvP protections
-     * (safe zones, fresh spawn immunity) when GP PvP rules are enabled for the world.
+     * Handle player-caused knockback against other players. Prevents knocking players
+     * around inside claims without access trust.
      *
      * @param event the knockback event
      * @param attacker the {@link Player} who caused the knockback
@@ -66,67 +63,16 @@ public abstract class KnockbackProtectionHandler implements Listener
 
         if (attackerData.ignoreClaims) return;
 
-        // Check if defender is in a claim where attacker has trust.
+        // Prevent knocking players around inside claims without access trust.
         Claim defenderClaim = this.dataStore.getClaimAt(defender.getLocation(), false, defenderData.lastClaim);
         if (defenderClaim != null)
         {
             defenderData.lastClaim = defenderClaim;
 
-            // If the attacker has access trust, allow the knockback.
-            if (defenderClaim.checkPermission(attacker, ClaimPermission.Access, null) == null)
-            {
-                return;
-            }
-        }
-
-        // If GP PvP rules don't apply, GriefPrevention doesn't manage PvP in this world.
-        // Allow knockback without further GP PvP checks (safe zones, fresh spawn, etc.).
-        if (!instance.pvpRulesApply(defender.getWorld()))
-        {
-            return;
-        }
-
-        // Protect fresh spawns from knockback abuse.
-        if (instance.config_pvp_protectFreshSpawns)
-        {
-            if (attackerData.pvpImmune || defenderData.pvpImmune)
+            // If the attacker lacks access trust, cancel the knockback.
+            if (defenderClaim.checkPermission(attacker, ClaimPermission.Access, null) != null)
             {
                 event.setCancelled(true);
-                GriefPrevention.sendMessage(
-                        attacker,
-                        TextMode.Err,
-                        attackerData.pvpImmune ? Messages.CantFightWhileImmune : Messages.ThatPlayerPvPImmune);
-                return;
-            }
-        }
-
-        // Check if defender is in a PVP safezone.
-        if (defenderClaim != null && instance.claimIsPvPSafeZone(defenderClaim))
-        {
-            PreventPvPEvent pvpEvent = new PreventPvPEvent(defenderClaim, attacker, defender);
-            Bukkit.getPluginManager().callEvent(pvpEvent);
-            if (!pvpEvent.isCancelled())
-            {
-                event.setCancelled(true);
-                GriefPrevention.sendMessage(attacker, TextMode.Err, Messages.PlayerInPvPSafeZone);
-            }
-            return;
-        }
-
-        // Check if attacker is in a PVP safezone (prevent shooting from safezone).
-        Claim attackerClaim = this.dataStore.getClaimAt(attacker.getLocation(), false, attackerData.lastClaim);
-        if (attackerClaim != null)
-        {
-            attackerData.lastClaim = attackerClaim;
-            if (instance.claimIsPvPSafeZone(attackerClaim))
-            {
-                PreventPvPEvent pvpEvent = new PreventPvPEvent(attackerClaim, attacker, defender);
-                Bukkit.getPluginManager().callEvent(pvpEvent);
-                if (!pvpEvent.isCancelled())
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(attacker, TextMode.Err, Messages.CantFightWhileImmune);
-                }
             }
         }
     }

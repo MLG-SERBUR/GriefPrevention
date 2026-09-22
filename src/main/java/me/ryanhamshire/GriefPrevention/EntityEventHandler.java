@@ -47,14 +47,12 @@ import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityInteractEvent;
-import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ExpBottleEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
 import org.bukkit.event.hanging.HangingBreakEvent.RemoveCause;
 import org.bukkit.event.hanging.HangingPlaceEvent;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.metadata.MetadataValue;
@@ -64,7 +62,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -665,19 +662,6 @@ public class EntityEventHandler implements Listener
     }
 
     @EventHandler
-    public void onEntityPickUpItem(@NotNull EntityPickupItemEvent event)
-    {
-        Player player = null;
-        if (event.getEntity() instanceof Player)
-        {
-            player = (Player) event.getEntity();
-        }
-
-        // FEATURE: Protect freshly-spawned players from PVP.
-        preventPvpSpawnCamp(event, player);
-    }
-
-    @EventHandler
     public void onCauldron(@NotNull CauldronLevelChangeEvent event)
     {
         //don't track in worlds where claims are not enabled
@@ -696,33 +680,4 @@ public class EntityEventHandler implements Listener
             GriefPrevention.sendMessage(player, TextMode.Err, noBuildReason.get());
         }
     }
-
-    private void preventPvpSpawnCamp(@NotNull EntityPickupItemEvent event, @Nullable Player player)
-    {
-        // This is specific to players in pvp worlds.
-        if (player == null || !instance.pvpRulesApply(player.getWorld())) return;
-
-        //if we're preventing spawn camping and the player was previously empty handed...
-        if (instance.config_pvp_protectFreshSpawns && (instance.getItemInHand(player, EquipmentSlot.HAND).getType() == Material.AIR))
-        {
-            //if that player is currently immune to pvp
-            PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            if (playerData.pvpImmune)
-            {
-                //if it's been less than 10 seconds since the last time he spawned, don't pick up the item
-                long now = Calendar.getInstance().getTimeInMillis();
-                long elapsedSinceLastSpawn = now - playerData.lastSpawn;
-                if (elapsedSinceLastSpawn < 10000)
-                {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                //otherwise take away his immunity. he may be armed now.  at least, he's worth killing for some loot
-                playerData.pvpImmune = false;
-                GriefPrevention.sendMessage(player, TextMode.Warn, Messages.PvPImmunityEnd);
-            }
-        }
-    }
-
 }

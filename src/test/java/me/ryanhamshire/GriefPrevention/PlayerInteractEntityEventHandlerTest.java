@@ -64,7 +64,6 @@ public class PlayerInteractEntityEventHandlerTest
         GriefPrevention plugin = mock(GriefPrevention.class);
         plugin.dataStore = dataStore;
         plugin.config_claims_protectHorses = true;
-        plugin.config_pvp_blockedCommands = new ArrayList<>();
         plugin.config_claims_commandsRequiringAccessTrust = new ArrayList<>();
         plugin.config_spam_monitorSlashCommands = new ArrayList<>();
         plugin.config_eavesdrop_whisperCommands = new ArrayList<>();

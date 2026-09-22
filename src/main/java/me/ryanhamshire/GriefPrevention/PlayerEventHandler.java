@@ -126,7 +126,6 @@ class PlayerEventHandler implements Listener
 
     //matcher for banned words
     private WordFinder bannedWordFinder;
-    private MonitoredCommands pvpBlockedCommands;
     private MonitoredCommands accessTrustCommands;
     private MonitoredCommands chatCommands;
     private MonitoredCommands whisperCommands;
@@ -144,7 +143,6 @@ class PlayerEventHandler implements Listener
         this.instance = plugin;
         // Initialize empty on load so never null just in case. Reload after plugins enable.
         this.bannedWordFinder = new WordFinder(List.of());
-        this.pvpBlockedCommands = new MonitoredCommands(List.of());
         this.accessTrustCommands = new MonitoredCommands(List.of());
         this.chatCommands = new MonitoredCommands(List.of());
         this.whisperCommands = new MonitoredCommands(List.of());
@@ -166,7 +164,6 @@ class PlayerEventHandler implements Listener
     {
         this.howToClaimPattern = null;
         this.bannedWordFinder = new WordFinder(instance.dataStore.loadBannedWords());
-        this.pvpBlockedCommands = new MonitoredCommands(instance.config_pvp_blockedCommands);
         this.accessTrustCommands = new MonitoredCommands(instance.config_claims_commandsRequiringAccessTrust);
         this.chatCommands = new MonitoredCommands(instance.config_spam_monitorSlashCommands);
         this.whisperCommands = new MonitoredCommands(instance.config_eavesdrop_whisperCommands);
@@ -491,16 +488,6 @@ class PlayerEventHandler implements Listener
             }
         }
 
-        //if in pvp, block any pvp-banned slash commands
-        if (playerData == null) playerData = this.dataStore.getPlayerData(event.getPlayer().getUniqueId());
-
-        if ((playerData.inPvpCombat()) && pvpBlockedCommands.isMonitoredCommand(command))
-        {
-            event.setCancelled(true);
-            GriefPrevention.sendMessage(event.getPlayer(), TextMode.Err, Messages.CommandBannedInPvP);
-            return;
-        }
-
         //soft mute for chat slash commands
         if (category == CommandCategory.Chat && this.dataStore.isSoftMuted(player.getUniqueId()))
         {
@@ -640,9 +627,6 @@ class PlayerEventHandler implements Listener
         //if player has never played on the server before...
         if (!player.hasPlayedBefore())
         {
-            //may need pvp protection
-            instance.checkPvpProtectionNeeded(player);
-
             //if in survival claims mode, send a message about the claim basics video (except for admins - assumed experts)
             if (instance.config_claims_worldModes.get(player.getWorld()) == ClaimsMode.Survival && !player.hasPermission("griefprevention.adminclaims") && this.dataStore.claims.size() > 10)
             {
@@ -805,14 +789,13 @@ class PlayerEventHandler implements Listener
         }
     }
 
-    //when a player spawns, conditionally apply temporary pvp protection
+    //when a player spawns
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     void onPlayerRespawn(PlayerRespawnEvent event)
     {
         Player player = event.getPlayer();
         PlayerData playerData = instance.dataStore.getPlayerData(player.getUniqueId());
         playerData.lastSpawn = Calendar.getInstance().getTimeInMillis();
-        playerData.lastPvpTimestamp = 0;  //no longer in pvp combat
 
         //also send him any messaged from grief prevention he would have received while dead
         if (playerData.messageOnRespawn != null)
@@ -820,8 +803,6 @@ class PlayerEventHandler implements Listener
             GriefPrevention.sendMessage(player, ChatColor.RESET /*color is alrady embedded in message in this case*/, playerData.messageOnRespawn, 40L);
             playerData.messageOnRespawn = null;
         }
-
-        instance.checkPvpProtectionNeeded(player);
     }
 
     //when a player dies...
@@ -904,12 +885,6 @@ class PlayerEventHandler implements Listener
             this.dataStore.savePlayerData(player.getUniqueId(), playerData);
         }
 
-        //FEATURE: players in pvp combat when they log out will die
-        if (instance.config_pvp_punishLogout && playerData.inPvpCombat())
-        {
-            player.setHealth(0);
-        }
-
         //drop data about this player
         this.dataStore.clearCachedPlayerData(playerID);
 
@@ -967,19 +942,6 @@ class PlayerEventHandler implements Listener
         //in creative worlds, dropping items is blocked
         if (instance.creativeRulesApply(player.getLocation()))
         {
-            event.setCancelled(true);
-            return;
-        }
-
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-
-        //FEATURE: players under siege or in PvP combat, can't throw items on the ground to hide
-        //them or give them away to other players before they are defeated
-
-        //if in combat, don't let him drop it
-        if (!instance.config_pvp_allowCombatItemDrop && playerData.inPvpCombat() && !player.isDead())
-        {
-            GriefPrevention.sendMessage(player, TextMode.Err, Messages.PvPNoDrop);
             event.setCancelled(true);
         }
     }
@@ -1091,19 +1053,16 @@ class PlayerEventHandler implements Listener
                     {
                         return;
                     }
-                    if (!instance.pvpRulesApply(entity.getLocation().getWorld()) || instance.config_pvp_protectPets)
-                    {
-                        //otherwise disallow
-                        OfflinePlayer owner = instance.getServer().getOfflinePlayer(ownerID);
-                        String ownerName = owner.getName();
-                        if (ownerName == null) ownerName = "someone";
-                        String message = instance.dataStore.getMessage(Messages.NotYourPet, ownerName);
-                        if (player.hasPermission("griefprevention.ignoreclaims"))
-                            message += "  " + instance.dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-                        GriefPrevention.sendMessage(player, TextMode.Err, message);
-                        event.setCancelled(true);
-                        return;
-                    }
+                    //otherwise disallow
+                    OfflinePlayer owner = instance.getServer().getOfflinePlayer(ownerID);
+                    String ownerName = owner.getName();
+                    if (ownerName == null) ownerName = "someone";
+                    String message = instance.dataStore.getMessage(Messages.NotYourPet, ownerName);
+                    if (player.hasPermission("griefprevention.ignoreclaims"))
+                        message += "  " + instance.dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
+                    GriefPrevention.sendMessage(player, TextMode.Err, message);
+                    event.setCancelled(true);
+                    return;
                 }
             }
         }
@@ -1122,21 +1081,6 @@ class PlayerEventHandler implements Listener
 
         //always allow interactions when player is in ignore claims mode
         if (playerData.ignoreClaims) return;
-
-        //don't allow container access during pvp combat in claimed areas
-        if ((entity instanceof StorageMinecart || entity instanceof PoweredMinecart))
-        {
-            if (playerData.inPvpCombat())
-            {
-                Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, playerData.lastClaim);
-                if (claim != null)
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.PvPNoContainers);
-                    event.setCancelled(true);
-                    return;
-                }
-            }
-        }
 
         //if the entity is a vehicle and we're preventing theft in claims
         if (instance.config_claims_preventTheft && entity instanceof Vehicle)
@@ -1367,8 +1311,8 @@ class PlayerEventHandler implements Listener
             }
         }
 
-        //lava buckets can't be dumped near other players unless pvp is on
-        if (!doesAllowLavaProximityInWorld(block.getWorld()) && !player.hasPermission("griefprevention.lava"))
+        //lava buckets can't be dumped near other players
+        if (!player.hasPermission("griefprevention.lava"))
         {
             if (bucketEvent.getBucket() == Material.LAVA_BUCKET)
             {
@@ -1412,18 +1356,6 @@ class PlayerEventHandler implements Listener
             {
                 GriefPrevention.AddLogEntry(player.getName() + " placed suspicious " + bucketEvent.getBucket().name() + " @ " + GriefPrevention.getfriendlyLocationString(block.getLocation()), CustomLogEntryTypes.SuspiciousActivity, true);
             }
-        }
-    }
-
-    private boolean doesAllowLavaProximityInWorld(World world)
-    {
-        if (GriefPrevention.instance.pvpRulesApply(world))
-        {
-            return GriefPrevention.instance.config_pvp_allowLavaNearPlayers;
-        }
-        else
-        {
-            return GriefPrevention.instance.config_pvp_allowLavaNearPlayers_NonPvp;
         }
     }
 
@@ -1560,17 +1492,9 @@ class PlayerEventHandler implements Listener
         {
             if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
-            //check if player is in a claim for pvp and permission checks below
+            //check if player is in a claim for permission checks below
             Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
 
-            //block container use during pvp combat in claimed areas, same reason as above, so players
-            //can't hide items from attackers
-            if (playerData.inPvpCombat() && claim != null)
-            {
-                GriefPrevention.sendMessage(player, TextMode.Err, Messages.PvPNoContainers);
-                event.setCancelled(true);
-                return;
-            }
             if (claim != null)
             {
                 playerData.lastClaim = claim;
@@ -1584,13 +1508,6 @@ class PlayerEventHandler implements Listener
                 }
             }
 
-            //if the event hasn't been cancelled, then the player is allowed to use the container
-            //so drop any pvp protection
-            if (playerData.pvpImmune)
-            {
-                playerData.pvpImmune = false;
-                GriefPrevention.sendMessage(player, TextMode.Warn, Messages.PvPImmunityEnd);
-            }
         }
 
         //otherwise apply rules for doors and beds, if configured that way
@@ -2087,13 +2004,6 @@ class PlayerEventHandler implements Listener
                 {
                     playerData.lastShovelLocation = null;
                     this.onPlayerInteract(event);
-                    return;
-                }
-
-                //apply pvp rule
-                if (playerData.inPvpCombat())
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoClaimDuringPvP);
                     return;
                 }
 

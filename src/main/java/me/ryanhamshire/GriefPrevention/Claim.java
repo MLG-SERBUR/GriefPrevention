@@ -462,13 +462,6 @@ public class Claim
         // Special building-only rules.
         if (permission == ClaimPermission.Build)
         {
-            // No building while in PVP.
-            PlayerData playerData = GriefPrevention.instance.dataStore.getPlayerData(uuid);
-            if (playerData.inPvpCombat())
-            {
-                return () -> GriefPrevention.instance.dataStore.getMessage(Messages.NoBuildPvP);
-            }
-
             // Allow farming crops with container trust.
             Material material = null;
             if (event instanceof BlockBreakEvent || event instanceof BlockPlaceEvent)

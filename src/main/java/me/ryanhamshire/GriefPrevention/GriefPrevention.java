@@ -166,21 +166,6 @@ public class GriefPrevention extends JavaPlugin
     public int config_spam_deathMessageCooldownSeconds;                //cooldown period for death messages (per player) in seconds
     public int config_spam_logoutMessageDelaySeconds;               //delay before a logout message will be shown (only if the player stays offline that long)
 
-    HashMap<World, Boolean> config_pvp_specifiedWorlds;                //list of worlds where pvp anti-grief rules apply, according to the config file
-    public boolean config_pvp_protectFreshSpawns;                    //whether to make newly spawned players immune until they pick up an item
-    public boolean config_pvp_punishLogout;                            //whether to kill players who log out during PvP combat
-    public int config_pvp_combatTimeoutSeconds;                        //how long combat is considered to continue after the most recent damage
-    public boolean config_pvp_allowCombatItemDrop;                    //whether a player can drop items during combat to hide them
-    public ArrayList<String> config_pvp_blockedCommands;            //list of commands which may not be used during pvp combat
-    public boolean config_pvp_noCombatInPlayerLandClaims;            //whether players may fight in player-owned land claims
-    public boolean config_pvp_noCombatInAdminLandClaims;            //whether players may fight in admin-owned land claims
-    public boolean config_pvp_noCombatInAdminSubdivisions;          //whether players may fight in subdivisions of admin-owned land claims
-    public boolean config_pvp_allowLavaNearPlayers;                 //whether players may dump lava near other players in pvp worlds
-    public boolean config_pvp_allowLavaNearPlayers_NonPvp;            //whather this applies in non-PVP rules worlds <ArchdukeLiamus>
-    public boolean config_pvp_allowFireNearPlayers;                 //whether players may start flint/steel fires near other players in pvp worlds
-    public boolean config_pvp_allowFireNearPlayers_NonPvp;            //whether this applies in non-PVP rules worlds <ArchdukeLiamus>
-    public boolean config_pvp_protectPets;                          //whether players may damage pets outside of land claims in pvp worlds
-
     public boolean config_blockClaimExplosions;                     //whether explosions may destroy claimed blocks
     public boolean config_blockSurfaceCreeperExplosions;            //whether creeper explosions near or above the surface destroy blocks
     public boolean config_blockSurfaceOtherExplosions;                //whether non-creeper explosions near or above the surface destroy blocks
@@ -437,11 +422,6 @@ public class GriefPrevention extends JavaPlugin
             }
         }
 
-        //get (deprecated) pvp fire placement proximity note and use it if it exists (in the new config format it will be overwritten later).
-        config_pvp_allowFireNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers", false);
-        //get (deprecated) pvp lava dump proximity note and use it if it exists (in the new config format it will be overwritten later).
-        config_pvp_allowLavaNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers", false);
-
         //decide claim mode for each world
         this.config_claims_worldModes = new ConcurrentHashMap<>();
         this.config_creativeWorldsExist = false;
@@ -511,14 +491,6 @@ public class GriefPrevention extends JavaPlugin
             {
                 this.config_claims_worldModes.put(world, ClaimsMode.Survival);
             }
-        }
-
-        //pvp worlds list
-        this.config_pvp_specifiedWorlds = new HashMap<>();
-        for (World world : worlds)
-        {
-            boolean pvpWorld = config.getBoolean("GriefPrevention.PvP.RulesEnabledInWorld." + world.getName(), world.getPVP());
-            this.config_pvp_specifiedWorlds.put(world, pvpWorld);
         }
 
         //sea level
@@ -625,12 +597,6 @@ public class GriefPrevention extends JavaPlugin
         this.config_spam_deathMessageCooldownSeconds = config.getInt("GriefPrevention.Spam.DeathMessageCooldownSeconds", 120);
         this.config_spam_logoutMessageDelaySeconds = config.getInt("GriefPrevention.Spam.Logout Message Delay In Seconds", 0);
 
-        this.config_pvp_protectFreshSpawns = config.getBoolean("GriefPrevention.PvP.ProtectFreshSpawns", true);
-        this.config_pvp_punishLogout = config.getBoolean("GriefPrevention.PvP.PunishLogout", true);
-        this.config_pvp_combatTimeoutSeconds = config.getInt("GriefPrevention.PvP.CombatTimeoutSeconds", 15);
-        this.config_pvp_allowCombatItemDrop = config.getBoolean("GriefPrevention.PvP.AllowCombatItemDrop", false);
-        String bannedPvPCommandsList = config.getString("GriefPrevention.PvP.BlockedSlashCommands", "/home;/vanish;/spawn;/tpa");
-
         this.config_blockClaimExplosions = config.getBoolean("GriefPrevention.BlockLandClaimExplosions", true);
         this.config_blockSurfaceCreeperExplosions = config.getBoolean("GriefPrevention.BlockSurfaceCreeperExplosions", true);
         this.config_blockSurfaceOtherExplosions = config.getBoolean("GriefPrevention.BlockSurfaceOtherExplosions", true);
@@ -693,15 +659,6 @@ public class GriefPrevention extends JavaPlugin
             GriefPrevention.AddLogEntry("ERROR: Material " + modificationToolMaterialName + " not found.  Defaulting to the golden shovel.  Please update your config.yml.");
             this.config_claims_modificationTool = Material.GOLDEN_SHOVEL;
         }
-
-        this.config_pvp_noCombatInPlayerLandClaims = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.PlayerOwnedClaims", true);
-        this.config_pvp_noCombatInAdminLandClaims = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeClaims", true);
-        this.config_pvp_noCombatInAdminSubdivisions = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeSubdivisions", true);
-        this.config_pvp_allowLavaNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.PvPWorlds", true);
-        this.config_pvp_allowLavaNearPlayers_NonPvp = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.NonPvPWorlds", false);
-        this.config_pvp_allowFireNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.PvPWorlds", true);
-        this.config_pvp_allowFireNearPlayers_NonPvp = config.getBoolean("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.NonPvPWorlds", false);
-        this.config_pvp_protectPets = config.getBoolean("GriefPrevention.PvP.ProtectPetsOutsideLandClaims", false);
 
         //optional database settings
         loadDatabaseSettings(config);
@@ -778,24 +735,6 @@ public class GriefPrevention extends JavaPlugin
         outConfig.set("GriefPrevention.Spam.AllowedIpAddresses", this.config_spam_allowedIpAddresses);
         outConfig.set("GriefPrevention.Spam.DeathMessageCooldownSeconds", this.config_spam_deathMessageCooldownSeconds);
         outConfig.set("GriefPrevention.Spam.Logout Message Delay In Seconds", this.config_spam_logoutMessageDelaySeconds);
-
-        for (World world : worlds)
-        {
-            outConfig.set("GriefPrevention.PvP.RulesEnabledInWorld." + world.getName(), this.pvpRulesApply(world));
-        }
-        outConfig.set("GriefPrevention.PvP.ProtectFreshSpawns", this.config_pvp_protectFreshSpawns);
-        outConfig.set("GriefPrevention.PvP.PunishLogout", this.config_pvp_punishLogout);
-        outConfig.set("GriefPrevention.PvP.CombatTimeoutSeconds", this.config_pvp_combatTimeoutSeconds);
-        outConfig.set("GriefPrevention.PvP.AllowCombatItemDrop", this.config_pvp_allowCombatItemDrop);
-        outConfig.set("GriefPrevention.PvP.BlockedSlashCommands", bannedPvPCommandsList);
-        outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.PlayerOwnedClaims", this.config_pvp_noCombatInPlayerLandClaims);
-        outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeClaims", this.config_pvp_noCombatInAdminLandClaims);
-        outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeSubdivisions", this.config_pvp_noCombatInAdminSubdivisions);
-        outConfig.set("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.PvPWorlds", this.config_pvp_allowLavaNearPlayers);
-        outConfig.set("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.NonPvPWorlds", this.config_pvp_allowLavaNearPlayers_NonPvp);
-        outConfig.set("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.PvPWorlds", this.config_pvp_allowFireNearPlayers);
-        outConfig.set("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.NonPvPWorlds", this.config_pvp_allowFireNearPlayers_NonPvp);
-        outConfig.set("GriefPrevention.PvP.ProtectPetsOutsideLandClaims", this.config_pvp_protectPets);
 
         outConfig.set("GriefPrevention.BlockLandClaimExplosions", this.config_blockClaimExplosions);
         outConfig.set("GriefPrevention.BlockSurfaceCreeperExplosions", this.config_blockSurfaceCreeperExplosions);
@@ -876,14 +815,6 @@ public class GriefPrevention extends JavaPlugin
         for (String command : commands)
         {
             this.config_eavesdrop_whisperCommands.add(command.trim().toLowerCase());
-        }
-
-        //try to parse the list of commands which should be banned during pvp combat
-        this.config_pvp_blockedCommands = new ArrayList<>();
-        commands = bannedPvPCommandsList.split(";");
-        for (String command : commands)
-        {
-            this.config_pvp_blockedCommands.add(command.trim().toLowerCase());
         }
     }
 
@@ -2687,58 +2618,6 @@ public class GriefPrevention extends JavaPlugin
         AddLogEntry("GriefPrevention disabled.");
     }
 
-    //called when a player spawns, applies protection for that player if necessary
-    public void checkPvpProtectionNeeded(Player player)
-    {
-        //if anti spawn camping feature is not enabled, do nothing
-        if (!this.config_pvp_protectFreshSpawns) return;
-
-        //if pvp is disabled, do nothing
-        if (!pvpRulesApply(player.getWorld())) return;
-
-        //if player is in creative mode, do nothing
-        if (player.getGameMode() == GameMode.CREATIVE) return;
-
-        //if the player has the damage any player permission enabled, do nothing
-        if (player.hasPermission("griefprevention.nopvpimmunity")) return;
-
-        //check inventory for well, anything
-        if (GriefPrevention.isInventoryEmpty(player))
-        {
-            //if empty, apply immunity
-            PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            playerData.pvpImmune = true;
-
-            //inform the player after he finishes respawning
-            GriefPrevention.sendMessage(player, TextMode.Success, Messages.PvPImmunityStart, 5L);
-
-            //start a task to re-check this player's inventory every minute until his immunity is gone
-            PvPImmunityValidationTask task = new PvPImmunityValidationTask(player);
-            this.getServer().getScheduler().scheduleSyncDelayedTask(this, task, 1200L);
-        }
-    }
-
-    static boolean isInventoryEmpty(Player player)
-    {
-        PlayerInventory inventory = player.getInventory();
-        ItemStack[] armorStacks = inventory.getArmorContents();
-
-        //check armor slots, stop if any items are found
-        for (ItemStack armorStack : armorStacks)
-        {
-            if (!(armorStack == null || armorStack.getType() == Material.AIR)) return false;
-        }
-
-        //check other slots, stop if any items are found
-        ItemStack[] generalStacks = inventory.getContents();
-        for (ItemStack generalStack : generalStacks)
-        {
-            if (!(generalStack == null || generalStack.getType() == Material.AIR)) return false;
-        }
-
-        return true;
-    }
-
     //moves a player from the claim he's in to a nearby wilderness location
     public Location ejectPlayer(Player player)
     {
@@ -2982,13 +2861,6 @@ public class GriefPrevention extends JavaPlugin
         return false;
     }
 
-    public boolean pvpRulesApply(World world)
-    {
-        Boolean configSetting = this.config_pvp_specifiedWorlds.get(world);
-        if (configSetting != null) return configSetting;
-        return world.getPVP();
-    }
-
     public static boolean isNewToServer(Player player)
     {
         if (player.getStatistic(Statistic.PICKUP, Material.OAK_LOG) > 0 ||
@@ -3029,13 +2901,6 @@ public class GriefPrevention extends JavaPlugin
     {
         if (hand == EquipmentSlot.OFF_HAND) return player.getInventory().getItemInOffHand();
         return player.getInventory().getItemInMainHand();
-    }
-
-    public boolean claimIsPvPSafeZone(Claim claim)
-    {
-        return claim.isAdminClaim() && claim.parent == null && GriefPrevention.instance.config_pvp_noCombatInAdminLandClaims ||
-                claim.isAdminClaim() && claim.parent != null && GriefPrevention.instance.config_pvp_noCombatInAdminSubdivisions ||
-                !claim.isAdminClaim() && GriefPrevention.instance.config_pvp_noCombatInPlayerLandClaims;
     }
 
     /*
