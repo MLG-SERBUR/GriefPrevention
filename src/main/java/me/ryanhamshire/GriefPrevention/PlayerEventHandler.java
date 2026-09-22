@@ -483,16 +483,12 @@ class PlayerEventHandler implements Listener
         //if requires access trust, check for permission
         if (accessTrustCommands.isMonitoredCommand(command))
         {
-            Claim claim = this.dataStore.getClaimAt(player.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    player, player.getLocation(), ClaimPermission.Access, event);
+            if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
             {
-                playerData.lastClaim = claim;
-                Supplier<String> reason = claim.checkPermission(player, ClaimPermission.Access, event);
-                if (reason != null)
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, reason.get());
-                    event.setCancelled(true);
-                }
+                GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                event.setCancelled(true);
             }
         }
     }
@@ -938,16 +934,13 @@ class PlayerEventHandler implements Listener
         if(cause != TeleportCause.CHORUS_FRUIT && cause != TeleportCause.ENDER_PEARL) return;
 
         Player player = event.getPlayer();
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
-        Claim toClaim = this.dataStore.getClaimAt(event.getTo(), false, playerData.lastClaim);
-        if(toClaim == null) return;
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                player, event.getTo(), ClaimPermission.Access, event);
+        if (decision.allowed()) return;
 
-        playerData.lastClaim = toClaim;
-        Supplier<String> noAccessReason = toClaim.checkPermission(player, ClaimPermission.Access, event);
-        if(noAccessReason == null) return;
-
-        GriefPrevention.sendMessage(player, TextMode.Err, noAccessReason.get());
+        if (decision.denial() != null && !decision.denial().get().isEmpty())
+            GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
         event.setCancelled(true);
         if (cause == TeleportCause.ENDER_PEARL)
             player.getInventory().addItem(new ItemStack(Material.ENDER_PEARL));
@@ -961,17 +954,9 @@ class PlayerEventHandler implements Listener
             return;
 
         Player player = event.getPlayer();
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
-        Claim claim = this.dataStore.getClaimAt(event.getRaid().getLocation(), false, playerData.lastClaim);
-        if (claim == null)
-            return;
-
-        playerData.lastClaim = claim;
-        if (claim.checkPermission(player, ClaimPermission.Build, event) == null)
-            return;
-
-        event.setCancelled(true);
+        if (!ProtectionHelper.checkClaimedAction(player, event.getRaid().getLocation(), ClaimPermission.Build, event).allowed())
+            event.setCancelled(true);
     }
 
     //when a player interacts with a specific part of entity...
@@ -1133,13 +1118,11 @@ class PlayerEventHandler implements Listener
     public void onPlayerThrowEgg(PlayerEggThrowEvent event)
     {
         Player player = event.getPlayer();
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-        Claim claim = this.dataStore.getClaimAt(event.getEgg().getLocation(), false, playerData.lastClaim);
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                player, event.getEgg().getLocation(), ClaimPermission.Container, event);
+        if (decision.allowed()) return;
 
-        //allow throw egg if player is in ignore claims mode
-        if (playerData.ignoreClaims || claim == null) return;
-
-        Supplier<String> failureReason = claim.checkPermission(player, ClaimPermission.Container, event);
+        Supplier<String> failureReason = decision.denial();
         if (failureReason != null)
         {
             String reason = failureReason.get();
@@ -1172,18 +1155,18 @@ class PlayerEventHandler implements Listener
         if (entity.getType() == EntityType.ARMOR_STAND || entity instanceof Animals)
         {
             Player player = event.getPlayer();
-            PlayerData playerData = instance.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = instance.dataStore.getClaimAt(entity.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    player, entity.getLocation(), ClaimPermission.Container, event);
+            //if no permission, cancel
+            if (!decision.allowed())
             {
-                //if no permission, cancel
-                Supplier<String> errorMessage = claim.checkPermission(player, ClaimPermission.Container, event);
-                if (errorMessage != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoDamageClaimedEntity, claim.getOwnerName());
-                    return;
-                }
+                event.setCancelled(true);
+                String ownerName = decision.claim() != null ? decision.claim().getOwnerName() : null;
+                if (ownerName != null)
+                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoDamageClaimedEntity, ownerName);
+                else if (decision.denial() != null && !decision.denial().get().isEmpty())
+                    GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                return;
             }
         }
     }
