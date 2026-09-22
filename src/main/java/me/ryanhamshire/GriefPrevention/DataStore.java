@@ -39,11 +39,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -90,7 +86,6 @@ public abstract class DataStore
     final static String playerDataFolderPath = dataLayerFolderPath + File.separator + "PlayerData";
     final static String configFilePath = dataLayerFolderPath + File.separator + "config.yml";
     final static String messagesFilePath = dataLayerFolderPath + File.separator + "messages.yml";
-    final static String softMuteFilePath = dataLayerFolderPath + File.separator + "softMute.txt";
     final static String bannedWordsFilePath = dataLayerFolderPath + File.separator + "bannedWords.txt";
 
     //the latest version of the data schema implemented here
@@ -108,9 +103,6 @@ public abstract class DataStore
     public static final String SURVIVAL_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpuser" + ChatColor.RESET;
     public static final String CREATIVE_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpcrea" + ChatColor.RESET;
     public static final String SUBDIVISION_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpsub" + ChatColor.RESET;
-
-    //list of UUIDs which are soft-muted
-    ConcurrentHashMap<UUID, Boolean> softMuteMap = new ConcurrentHashMap<>();
 
     protected int getSchemaVersion()
     {
@@ -184,65 +176,10 @@ public abstract class DataStore
             GriefPrevention.AddLogEntry("Update finished.");
         }
 
-        //load list of soft mutes
-        this.loadSoftMutes();
-
         //make a note of the data store schema version
         this.setSchemaVersion(latestSchemaVersion);
 
     }
-
-    private void loadSoftMutes()
-    {
-        File softMuteFile = new File(softMuteFilePath);
-        if (softMuteFile.exists())
-        {
-            BufferedReader inStream = null;
-            try
-            {
-                //open the file
-                inStream = new BufferedReader(new FileReader(softMuteFile.getAbsolutePath()));
-
-                //while there are lines left
-                String nextID = inStream.readLine();
-                while (nextID != null)
-                {
-                    //parse line into a UUID
-                    UUID playerID;
-                    try
-                    {
-                        playerID = UUID.fromString(nextID);
-                    }
-                    catch (Exception e)
-                    {
-                        playerID = null;
-                        GriefPrevention.AddLogEntry("Failed to parse soft mute entry as a UUID: " + nextID);
-                    }
-
-                    //push it into the map
-                    if (playerID != null)
-                    {
-                        this.softMuteMap.put(playerID, true);
-                    }
-
-                    //move to the next
-                    nextID = inStream.readLine();
-                }
-            }
-            catch (Exception e)
-            {
-                GriefPrevention.AddLogEntry("Failed to read from the soft mute data file: " + e);
-                e.printStackTrace();
-            }
-
-            try
-            {
-                if (inStream != null) inStream.close();
-            }
-            catch (IOException exception) {}
-        }
-    }
-
     public List<String> loadBannedWords()
     {
         try
@@ -266,65 +203,6 @@ public abstract class DataStore
             e.printStackTrace();
             return new ArrayList<>();
         }
-    }
-
-    //updates soft mute map and data file
-    boolean toggleSoftMute(UUID playerID)
-    {
-        boolean newValue = !this.isSoftMuted(playerID);
-
-        this.softMuteMap.put(playerID, newValue);
-        this.saveSoftMutes();
-
-        return newValue;
-    }
-
-    public boolean isSoftMuted(UUID playerID)
-    {
-        Boolean mapEntry = this.softMuteMap.get(playerID);
-        if (mapEntry == null || mapEntry == Boolean.FALSE)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private void saveSoftMutes()
-    {
-        BufferedWriter outStream = null;
-
-        try
-        {
-            //open the file and write the new value
-            File softMuteFile = new File(softMuteFilePath);
-            softMuteFile.createNewFile();
-            outStream = new BufferedWriter(new FileWriter(softMuteFile));
-
-            for (Map.Entry<UUID, Boolean> entry : softMuteMap.entrySet())
-            {
-                if (entry.getValue() == Boolean.TRUE)
-                {
-                    outStream.write(entry.getKey().toString());
-                    outStream.newLine();
-                }
-            }
-
-        }
-
-        //if any problem, log it
-        catch (Exception e)
-        {
-            GriefPrevention.AddLogEntry("Unexpected exception saving soft mute data: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        //close the file
-        try
-        {
-            if (outStream != null) outStream.close();
-        }
-        catch (IOException exception) {}
     }
 
     //removes cached player data from memory

@@ -142,10 +142,6 @@ commands:
       usage: /<command>
       permission: griefprevention.claims
       aliases: claimexplosion
-    softmute:
-      description: Toggles whether a player's messages will only reach other soft-muted players.
-      usage: /<command> <player>
-      permission: griefprevention.softmute
     gpreload:
       description: Reloads Grief Prevention's configuration settings.  Does NOT totally reload the entire plugin.
       usage: /<command>
@@ -192,7 +188,6 @@ permissions:
             griefprevention.lava: true
             griefprevention.eavesdrop: true
             griefprevention.deathblow: true
-            griefprevention.softmute: true
             griefprevention.reload: true
             griefprevention.visualizenearbyclaims: true
             griefprevention.overrideclaimcountlimit: true
@@ -237,16 +232,13 @@ permissions:
         description: Grants permission to place lava near the surface and outside of claims.
         default: op
     griefprevention.eavesdrop:
-        description: Allows a player to see whispered chat messages (/tell) and softmuted messages.
+        description: Allows a player to see whispered chat messages (/tell).
         default: op
     griefprevention.eavesdropsigns:
         description: Allows a player to see sign placements as chat messages.
         default: op
     griefprevention.reload:
         description: Grants access to /gpreload.
-        default: op
-    griefprevention.softmute:
-        description: Grants access to /softmute.
         default: op
     griefprevention.claims:
         description: Grants access to claim-related slash commands.

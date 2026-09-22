@@ -192,32 +192,10 @@ class PlayerEventHandler implements Listener
             recipients.add(player);
         }
 
-        //soft muted messages go out to all soft muted players
-        else if (this.dataStore.isSoftMuted(player.getUniqueId()))
-        {
-            String notificationMessage = "(Muted " + player.getName() + "): " + message;
-            Set<Player> recipientsToKeep = new HashSet<>();
-            for (Player recipient : recipients)
-            {
-                if (this.dataStore.isSoftMuted(recipient.getUniqueId()))
-                {
-                    recipientsToKeep.add(recipient);
-                }
-                else if (recipient.hasPermission("griefprevention.eavesdrop"))
-                {
-                    recipient.sendMessage(ChatColor.GRAY + notificationMessage);
-                }
-            }
-            recipients.clear();
-            recipients.addAll(recipientsToKeep);
-
-            GriefPrevention.AddLogEntry(notificationMessage, CustomLogEntryTypes.MutedChat, false);
-        }
-
         //troll and excessive profanity filter
         else if (!player.hasPermission("griefprevention.spam") && this.bannedWordFinder.hasMatch(message))
         {
-            //allow admins to see the soft-muted text
+            //allow admins to see the filtered text
             String notificationMessage = "(Muted " + player.getName() + "): " + message;
             for (Player recipient : recipients)
             {
@@ -244,12 +222,11 @@ class PlayerEventHandler implements Listener
                 }
             }
 
-            //otherwise assume chat troll and mute all chat from this sender until an admin says otherwise
+            //otherwise assume chat troll and silence this message
             else if (instance.config_trollFilterEnabled)
             {
-                GriefPrevention.AddLogEntry("Auto-muted new player " + player.getName() + " for profanity shortly after join.  Use /SoftMute to undo.", CustomLogEntryTypes.AdminActivity);
+                GriefPrevention.AddLogEntry("Muted new player " + player.getName() + " for profanity shortly after join.", CustomLogEntryTypes.AdminActivity);
                 GriefPrevention.AddLogEntry(notificationMessage, CustomLogEntryTypes.MutedChat, false);
-                instance.dataStore.toggleSoftMute(player.getUniqueId());
             }
         }
 
@@ -437,13 +414,6 @@ class PlayerEventHandler implements Listener
 
             Player targetPlayer = instance.getServer().getPlayer(command.getArgument(0));
 
-            //softmute feature
-            if (this.dataStore.isSoftMuted(player.getUniqueId()) && targetPlayer != null && !this.dataStore.isSoftMuted(targetPlayer.getUniqueId()))
-            {
-                event.setCancelled(true);
-                return;
-            }
-
             //if eavesdrop enabled and sender doesn't have the eavesdrop immunity permission, eavesdrop
             if (instance.config_whisperNotifications && !player.hasPermission("griefprevention.eavesdropimmune"))
             {
@@ -486,13 +456,6 @@ class PlayerEventHandler implements Listener
                     return;
                 }
             }
-        }
-
-        //soft mute for chat slash commands
-        if (category == CommandCategory.Chat && this.dataStore.isSoftMuted(player.getUniqueId()))
-        {
-            event.setCancelled(true);
-            return;
         }
 
         //if the slash command used is in the list of monitored commands, treat it like a chat message (see above)

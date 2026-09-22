@@ -140,8 +140,6 @@ public enum Messages
     ExplosivesEnabled("This claim is now vulnerable to explosions.  Use /claimexplosions again to re-enable protections."),
     ClaimExplosivesAdvertisement("To allow explosives to destroy blocks in this land claim, use /claimexplosions."),
     NoPistonsOutsideClaims("Warning: Pistons won't move blocks outside land claims."),
-    SoftMuted("Soft-muted {0}.", "0: The changed player's name."),
-    UnSoftMuted("Un-soft-muted {0}.", "0: The changed player's name."),
     AdvertiseACandACB("You may use /acb to give yourself more claim blocks, or /adminclaims to create a free administrative claim."),
     AdvertiseAdminClaims("You could create an administrative land claim instead using /adminclaims, which you'd share with other administrators."),
     AdvertiseACB("You may use /acb to give yourself more claim blocks."),

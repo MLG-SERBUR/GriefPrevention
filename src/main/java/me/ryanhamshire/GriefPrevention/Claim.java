@@ -88,9 +88,6 @@ public class Claim
     //note subdivisions themselves never have children
     public ArrayList<Claim> children = new ArrayList<>();
 
-    //following a siege, buttons/levers are unlocked temporarily.  this represents that state
-    public boolean doorsOpen = false;
-
     //whether or not this is an administrative claim
     //administrative claims are created and maintained by players with the griefprevention.adminclaims permission.
     public boolean isAdminClaim()
@@ -186,7 +183,6 @@ public class Claim
         this.parent = claim.parent;
         this.inheritNothing = claim.inheritNothing;
         this.children = new ArrayList<>(claim.children);
-        this.doorsOpen = claim.doorsOpen;
     }
 
     //measurements.  all measurements are in blocks
