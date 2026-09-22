@@ -96,6 +96,20 @@ public final class ProtectionHelper
             @NotNull ClaimPermission permission,
             @Nullable Event trigger)
     {
+        return checkClaimedAction(source, target, permission, trigger, null);
+    }
+
+    /**
+     * Same as {@link #checkClaimedAction(ProjectileSource, Location, ClaimPermission, Event)},
+     * reusing a caller-held claim to keep per-block explosion loops cheap.
+     */
+    public static @NotNull ClaimDecision checkClaimedAction(
+            @Nullable ProjectileSource source,
+            @NotNull Location target,
+            @NotNull ClaimPermission permission,
+            @Nullable Event trigger,
+            @Nullable Claim cachedClaim)
+    {
         World world = target.getWorld();
         if (world == null || !GriefPrevention.instance.claimsEnabledForWorld(world))
             return new ClaimDecision(null, null);
@@ -108,7 +122,7 @@ public final class ProtectionHelper
             return new ClaimDecision(denial, deniedClaim);
         }
 
-        Claim claim = GriefPrevention.instance.dataStore.getClaimAt(target, false, null);
+        Claim claim = GriefPrevention.instance.dataStore.getClaimAt(target, false, cachedClaim);
         if (claim == null) return new ClaimDecision(null, null);
 
         if (isBlockSourceInClaim(source, claim)) return new ClaimDecision(null, claim);
