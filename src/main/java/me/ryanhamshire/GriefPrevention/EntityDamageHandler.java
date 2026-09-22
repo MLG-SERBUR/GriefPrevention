@@ -296,13 +296,14 @@ public class EntityDamageHandler implements Listener
         // but also doesn't disable self-damage.
         if (entity instanceof Player) return false;
 
-        Claim claim = dataStore.getClaimAt(entity.getLocation(), false, null);
+        // Unattributed blast (null source): denied exactly when inside a claim.
+        if (!ProtectionHelper.checkClaimedAction(null, entity.getLocation(), ClaimPermission.Build, event.original()).allowed())
+        {
+            event.setCancelled(true);
+            return true;
+        }
 
-        // Only block explosion damage inside claims.
-        if (claim == null) return false;
-
-        event.setCancelled(true);
-        return true;
+        return false;
     }
 
     /**
@@ -852,47 +853,39 @@ public class EntityDamageHandler implements Listener
 
         //NOTE: vehicles can be pushed around.
         //so unless precautions are taken by the owner, a resourceful thief might find ways to steal anyway
-        Claim cachedClaim = null;
-        PlayerData playerData = null;
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                ProtectionHelper.resolveSource(damageSource, attacker),
+                event.getVehicle().getLocation(),
+                ClaimPermission.Container,
+                event);
 
-        if (attacker != null)
-        {
-            playerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-            cachedClaim = playerData.lastClaim;
-        }
+        // Allowed (trusted player or wilderness): nothing to do.
+        if (decision.allowed()) return;
 
-        Claim claim = this.dataStore.getClaimAt(event.getVehicle().getLocation(), false, cachedClaim);
+        event.setCancelled(true);
 
-        // Require a claim.
-        if (claim == null) return;
-
-        //if damaged by anything other than a player, cancel the event
+        //if damaged by anything other than a player, remove the projectile and stop
         if (attacker == null)
         {
-            event.setCancelled(true);
             if (arrow != null) arrow.remove();
             return;
         }
 
         //otherwise the player damaging the entity must have permission
-        final Player finalAttacker = attacker;
-        Supplier<String> override = () ->
+        preventInfiniteBounce(arrow, event.getVehicle());
+        String message;
+        if (decision.claim() != null)
         {
-            String message = dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
-            if (finalAttacker.hasPermission("griefprevention.ignoreclaims"))
+            message = dataStore.getMessage(Messages.NoDamageClaimedEntity, decision.claim().getOwnerName());
+            if (attacker.hasPermission("griefprevention.ignoreclaims"))
                 message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-            return message;
-        };
-        Supplier<String> noContainersReason = claim.checkPermission(attacker, ClaimPermission.Container, event, override);
-        if (noContainersReason != null)
-        {
-            event.setCancelled(true);
-            preventInfiniteBounce(arrow, event.getVehicle());
-            GriefPrevention.sendMessage(attacker, TextMode.Err, noContainersReason.get());
         }
-
-        //cache claim for later
-        playerData.lastClaim = claim;
+        else if (decision.denial() != null && !decision.denial().get().isEmpty())
+        {
+            message = decision.denial().get();
+        }
+        else return;
+        GriefPrevention.sendMessage(attacker, TextMode.Err, message);
     }
 
     //when a splash potion affects one or more entities...
@@ -927,34 +920,27 @@ public class EntityDamageHandler implements Listener
 
                     if (affected.getType() == EntityType.VILLAGER || affected instanceof Animals)
                     {
-                        Claim claim = this.dataStore.getClaimAt(affected.getLocation(), false, cachedClaim);
-                        if (claim != null)
-                        {
-                            cachedClaim = claim;
+                        // Single funnel: trusted player and same-claim dispenser may splash.
+                        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                                projectileSource, affected.getLocation(), ClaimPermission.Container, event, cachedClaim);
+                        if (decision.claim() != null) cachedClaim = decision.claim();
+                        if (decision.allowed()) continue;
 
-                            if (thrower == null)
+                        // If the source may not affect the entity, null its effect.
+                        event.setIntensity(affected, 0);
+                        if (thrower != null && messagedPlayer.compareAndSet(false, true))
+                        {
+                            String message;
+                            if (decision.claim() != null)
                             {
-                                // Non-player source: Witches, dispensers, etc.
-                                if (!ProtectionHelper.isBlockSourceInClaim(projectileSource, claim))
-                                {
-                                    // If the source is not a block in the same claim as the affected entity, disallow.
-                                    event.setIntensity(affected, 0);
-                                }
+                                message = instance.dataStore.getMessage(Messages.NoDamageClaimedEntity, decision.claim().getOwnerName());
                             }
-                            else
+                            else if (decision.denial() != null && !decision.denial().get().isEmpty())
                             {
-                                // Source is a player. Determine if they have permission to access entities in the claim.
-                                Supplier<String> override = () -> instance.dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
-                                final Supplier<String> noContainersReason = claim.checkPermission(thrower, ClaimPermission.Container, event, override);
-                                if (noContainersReason != null)
-                                {
-                                    event.setIntensity(affected, 0);
-                                    if (messagedPlayer.compareAndSet(false, true))
-                                    {
-                                        GriefPrevention.sendMessage(thrower, TextMode.Err, noContainersReason.get());
-                                    }
-                                }
+                                message = decision.denial().get();
                             }
+                            else continue;
+                            GriefPrevention.sendMessage(thrower, TextMode.Err, message);
                         }
                     }
                 }
