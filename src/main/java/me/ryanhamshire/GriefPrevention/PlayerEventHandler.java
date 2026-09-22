@@ -1048,20 +1048,16 @@ class PlayerEventHandler implements Listener
         //if the entity is a vehicle and we're preventing theft in claims
         if (instance.config_claims_preventTheft && entity instanceof Vehicle)
         {
-            //if the entity is in a claim
-            Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, null);
-            if (claim != null)
+            //for storage entities, apply container rules (this is a potential theft)
+            if (entity instanceof InventoryHolder)
             {
-                //for storage entities, apply container rules (this is a potential theft)
-                if (entity instanceof InventoryHolder)
+                ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                        player, entity.getLocation(), ClaimPermission.Container, event);
+                if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
                 {
-                    Supplier<String> noContainersReason = claim.checkPermission(player, ClaimPermission.Container, event);
-                    if (noContainersReason != null)
-                    {
-                        GriefPrevention.sendMessage(player, TextMode.Err, noContainersReason.get());
-                        event.setCancelled(true);
-                        return;
-                    }
+                    GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                    event.setCancelled(true);
+                    return;
                 }
             }
         }
@@ -1069,25 +1065,25 @@ class PlayerEventHandler implements Listener
         //if the entity is an animal, apply container rules
         if ((instance.config_claims_preventTheft && (entity instanceof Animals || entity instanceof Fish || entity instanceof CopperGolem)) || (entity.getType() == EntityType.VILLAGER && instance.config_claims_villagerTradingRequiresTrust))
         {
-            //if the entity is in a claim
-            Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, null);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    player, entity.getLocation(), ClaimPermission.Container, event);
+            if (!decision.allowed())
             {
-                Supplier<String> override = () ->
+                String message;
+                if (decision.claim() != null)
                 {
-                    String message = instance.dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
+                    message = instance.dataStore.getMessage(Messages.NoDamageClaimedEntity, decision.claim().getOwnerName());
                     if (player.hasPermission("griefprevention.ignoreclaims"))
                         message += "  " + instance.dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-
-                    return message;
-                };
-                final Supplier<String> noContainersReason = claim.checkPermission(player, ClaimPermission.Container, event, override);
-                if (noContainersReason != null)
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, noContainersReason.get());
-                    event.setCancelled(true);
-                    return;
                 }
+                else if (decision.denial() != null && !decision.denial().get().isEmpty())
+                {
+                    message = decision.denial().get();
+                }
+                else return;
+                GriefPrevention.sendMessage(player, TextMode.Err, message);
+                event.setCancelled(true);
+                return;
             }
         }
 
@@ -1096,46 +1092,37 @@ class PlayerEventHandler implements Listener
         //if preventing theft, prevent leashing claimed creatures
         if (instance.config_claims_preventTheft && entity instanceof Creature && itemInHand.getType() == Material.LEAD)
         {
-            Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, playerData.lastClaim);
-            if (claim != null)
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    player, entity.getLocation(), ClaimPermission.Container, event);
+            if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
             {
-                Supplier<String> failureReason = claim.checkPermission(player, ClaimPermission.Container, event);
-                if (failureReason != null)
-                {
-                    event.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, failureReason.get());
-                    return;
-                }
+                event.setCancelled(true);
+                GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                return;
             }
         }
 
         // Name tags may only be used on entities that the player is allowed to kill.
         if (itemInHand.getType() == Material.NAME_TAG)
         {
-            //don't track in worlds where claims are not enabled
-            if (!instance.claimsEnabledForWorld(entity.getWorld())) return;
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    player, entity.getLocation(), ClaimPermission.Container, event);
+            if (decision.allowed()) return;
 
-            Claim cachedClaim = playerData.lastClaim;
-            Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, cachedClaim);
-
-            // Require a claim to handle.
-            if (claim == null) return;
-
-            Supplier<String> override = () ->
+            String message;
+            if (decision.claim() != null)
             {
-                String message = dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
+                message = dataStore.getMessage(Messages.NoDamageClaimedEntity, decision.claim().getOwnerName());
                 if (player.hasPermission("griefprevention.ignoreclaims"))
                     message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-                return message;
-            };
-
-            // Check for permission to access containers.
-            Supplier<String> noContainersReason = claim.checkPermission(player, ClaimPermission.Container, event, override);
-
-            // If player has permission, action is allowed.
-            if (noContainersReason == null) return;
+            }
+            else if (decision.denial() != null && !decision.denial().get().isEmpty())
+            {
+                message = decision.denial().get();
+            }
+            else return;
             event.setCancelled(true);
-            GriefPrevention.sendMessage(player, TextMode.Err, noContainersReason.get());
+            GriefPrevention.sendMessage(player, TextMode.Err, message);
         }
     }
 
@@ -1601,16 +1588,12 @@ class PlayerEventHandler implements Listener
             }
             else if (clickedBlock != null && Tag.ITEMS_BOATS.isTagged(materialInHand))
             {
-                if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-                Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-                if (claim != null)
+                ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                        player, clickedBlock.getLocation(), ClaimPermission.Container, event);
+                if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
                 {
-                    Supplier<String> reason = claim.checkPermission(player, ClaimPermission.Container, event);
-                    if (reason != null)
-                    {
-                        GriefPrevention.sendMessage(player, TextMode.Err, reason.get());
-                        event.setCancelled(true);
-                    }
+                    GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                    event.setCancelled(true);
                 }
 
                 return;
@@ -1625,16 +1608,12 @@ class PlayerEventHandler implements Listener
                             materialInHand == Material.HOPPER_MINECART) &&
                     !instance.creativeRulesApply(clickedBlock.getLocation()))
             {
-                if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
-                Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
-                if (claim != null)
+                ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                        player, clickedBlock.getLocation(), ClaimPermission.Container, event);
+                if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
                 {
-                    Supplier<String> reason = claim.checkPermission(player, ClaimPermission.Container, event);
-                    if (reason != null)
-                    {
-                        GriefPrevention.sendMessage(player, TextMode.Err, reason.get());
-                        event.setCancelled(true);
-                    }
+                    GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+                    event.setCancelled(true);
                 }
 
                 return;
