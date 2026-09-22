@@ -841,11 +841,6 @@ class PlayerEventHandler implements Listener
         }
 
         this.deathTimestamps.put(player.getUniqueId(), now);
-
-        //these are related to locking dropped items on death to prevent theft
-        PlayerData playerData = instance.dataStore.getPlayerData(player.getUniqueId());
-        playerData.dropsAreUnlocked = false;
-        playerData.receivedDropUnlockAdvertisement = false;
     }
 
     //when a player gets kicked...

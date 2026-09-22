@@ -102,12 +102,6 @@ public class PlayerData
     //for addons to set per-player claim limits. Any negative value will use config's value
     private int AccruedClaimBlocksLimit = -1;
 
-    //whether or not this player has received a message about unlocking death drops since his last death
-    boolean receivedDropUnlockAdvertisement = false;
-
-    //whether or not this player's dropped items (on death) are unlocked for other players to pick up
-    boolean dropsAreUnlocked = false;
-
     //message to send to player after he respawns
     String messageOnRespawn = null;
 

@@ -19,22 +19,17 @@
 package me.ryanhamshire.GriefPrevention;
 
 import com.griefprevention.protection.ProtectionHelper;
-import me.ryanhamshire.GriefPrevention.events.ProtectDeathDropsEvent;
-import org.bukkit.Bukkit;
 import org.bukkit.ExplosionResult;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.FallingBlock;
-import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
-import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Vehicle;
@@ -54,7 +49,6 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityInteractEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ExpBottleEvent;
-import org.bukkit.event.entity.ItemMergeEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
@@ -73,7 +67,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 //handles events related to entities
@@ -534,49 +527,6 @@ public class EntityEventHandler implements Listener
         {
             event.setCancelled(true);
         }
-
-        //if item is on watch list, apply protection
-        ArrayList<PendingItemProtection> watchList = GriefPrevention.instance.pendingItemWatchList;
-        Item newItem = event.getEntity();
-        Long now = null;
-        for (int i = 0; i < watchList.size(); i++)
-        {
-            PendingItemProtection pendingProtection = watchList.get(i);
-            //ignore and remove any expired pending protections
-            if (now == null) now = System.currentTimeMillis();
-            if (pendingProtection.expirationTimestamp < now)
-            {
-                watchList.remove(i--);
-                continue;
-            }
-            //skip if item stack doesn't match
-            if (pendingProtection.itemStack.getAmount() != newItem.getItemStack().getAmount() ||
-                    pendingProtection.itemStack.getType() != newItem.getItemStack().getType())
-            {
-                continue;
-            }
-
-            //skip if new item location isn't near the expected spawn area
-            Location spawn = event.getLocation();
-            Location expected = pendingProtection.location;
-            if (!spawn.getWorld().equals(expected.getWorld()) ||
-                    spawn.getX() < expected.getX() - 5 ||
-                    spawn.getX() > expected.getX() + 5 ||
-                    spawn.getZ() < expected.getZ() - 5 ||
-                    spawn.getZ() > expected.getZ() + 5 ||
-                    spawn.getY() < expected.getY() - 15 ||
-                    spawn.getY() > expected.getY() + 3)
-            {
-                continue;
-            }
-
-            //otherwise, mark item with protection information
-            newItem.setMetadata("GP_ITEMOWNER", new FixedMetadataValue(GriefPrevention.instance, pendingProtection.owner));
-
-            //and remove pending protection data
-            watchList.remove(i);
-            break;
-        }
     }
 
     //when an experience bottle explodes...
@@ -629,50 +579,6 @@ public class EntityEventHandler implements Listener
             event.setDroppedExp(0);
             event.getDrops().clear();
         }
-
-        //FEATURE: lock dropped items to player who dropped them
-        if (!(entity instanceof Player player))
-        {
-            return;
-        }
-
-        PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-        World world = entity.getWorld();
-
-        //decide whether or not to apply this feature to this situation (depends on the world where it happens)
-        boolean isPvPWorld = GriefPrevention.instance.pvpRulesApply(world);
-        if ((isPvPWorld && GriefPrevention.instance.config_lockDeathDropsInPvpWorlds) ||
-                (!isPvPWorld && GriefPrevention.instance.config_lockDeathDropsInNonPvpWorlds))
-        {
-            Claim claim = this.dataStore.getClaimAt(player.getLocation(), false, playerData.lastClaim);
-            ProtectDeathDropsEvent protectionEvent = new ProtectDeathDropsEvent(claim);
-            Bukkit.getPluginManager().callEvent(protectionEvent);
-            if (!protectionEvent.isCancelled())
-            {
-                //remember information about these drops so that they can be marked when they spawn as items
-                long expirationTime = System.currentTimeMillis() + 3000;  //now + 3 seconds
-                Location deathLocation = player.getLocation();
-                UUID playerID = player.getUniqueId();
-                List<ItemStack> drops = event.getDrops();
-                for (ItemStack stack : drops)
-                {
-                    GriefPrevention.instance.pendingItemWatchList.add(
-                            new PendingItemProtection(deathLocation, playerID, expirationTime, stack));
-                }
-
-                //allow the player to receive a message about how to unlock any drops
-                playerData.dropsAreUnlocked = false;
-                playerData.receivedDropUnlockAdvertisement = false;
-            }
-        }
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
-    public void onItemMerge(ItemMergeEvent event)
-    {
-        Item item = event.getEntity();
-        List<MetadataValue> data = item.getMetadata("GP_ITEMOWNER");
-        event.setCancelled(!data.isEmpty());
     }
 
     //when an entity picks up an item
@@ -761,17 +667,11 @@ public class EntityEventHandler implements Listener
     @EventHandler
     public void onEntityPickUpItem(@NotNull EntityPickupItemEvent event)
     {
-        // Hostiles are allowed to equip death drops to preserve the challenge of item retrieval.
-        if (event.getEntity() instanceof Monster) return;
-
         Player player = null;
         if (event.getEntity() instanceof Player)
         {
             player = (Player) event.getEntity();
         }
-
-        //FEATURE: Lock dropped items to player who dropped them.
-        protectLockedDrops(event, player);
 
         // FEATURE: Protect freshly-spawned players from PVP.
         preventPvpSpawnCamp(event, player);
@@ -794,43 +694,6 @@ public class EntityEventHandler implements Listener
         {
             event.setCancelled(true);
             GriefPrevention.sendMessage(player, TextMode.Err, noBuildReason.get());
-        }
-    }
-
-    private void protectLockedDrops(@NotNull EntityPickupItemEvent event, @Nullable Player player)
-    {
-        Item item = event.getItem();
-        List<MetadataValue> data = item.getMetadata("GP_ITEMOWNER");
-
-        // Ignore absent or invalid data.
-        if (data.isEmpty() || !(data.get(0).value() instanceof UUID ownerID)) return;
-
-        // Get owner from stored UUID.
-        OfflinePlayer owner = instance.getServer().getOfflinePlayer(ownerID);
-
-        // Owner must be online and can pick up their own drops.
-        if (!owner.isOnline() || Objects.equals(player, owner)) return;
-
-        PlayerData playerData = this.dataStore.getPlayerData(ownerID);
-
-        // If drops are unlocked, allow pick up.
-        if (playerData.dropsAreUnlocked) return;
-
-        // Block pick up.
-        event.setCancelled(true);
-
-        // Non-players (dolphins, allays) do not need to generate prompts.
-        if (player == null)
-        {
-            return;
-        }
-
-        // If the owner hasn't been instructed how to unlock, send explanatory messages.
-        if (!playerData.receivedDropUnlockAdvertisement)
-        {
-            GriefPrevention.sendMessage(owner.getPlayer(), TextMode.Instr, Messages.DropUnlockAdvertisement);
-            GriefPrevention.sendMessage(player, TextMode.Err, Messages.PickupBlockedExplanation, GriefPrevention.lookupPlayerName(ownerID));
-            playerData.receivedDropUnlockAdvertisement = true;
         }
     }
 

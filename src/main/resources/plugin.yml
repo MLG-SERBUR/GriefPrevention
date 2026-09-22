@@ -132,10 +132,6 @@ commands:
       usage: /<command> <player>
       aliases: giveclaim
       permission: griefprevention.transferclaim
-    unlockdrops:
-      description: Allows other players to pick up the items you dropped when you died.
-      usage: /<command>
-      permission: griefprevention.unlockdrops
     claimslist:
       description: Lists information about a player's claim blocks and claims.
       usage: /<command> or /<command> <player>
@@ -209,17 +205,10 @@ permissions:
             griefprevention.seeinactivity: true
             griefprevention.eavesdropimmune: true
             griefprevention.deleteclaimsinworld: true
-            griefprevention.unlockothersdrops: true
             griefprevention.seeclaimsize: true
     griefprevention.extendclaim.toolbypass:
         description: Allows a player to extend a claim without a modification tool.
         default: false
-    griefprevention.unlockdrops:
-        description: Grants permission to use /unlockdrops.
-        default: true
-    griefprevention.unlockothersdrops:
-        description: Grants permission to use /unlockdrops for other players.
-        default: op
     griefprevention.trapped:
         description: Grants permission to use /trapped.
         default: true

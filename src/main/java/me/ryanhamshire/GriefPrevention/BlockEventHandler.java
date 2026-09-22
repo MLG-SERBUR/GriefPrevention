@@ -22,7 +22,6 @@ import com.griefprevention.visualization.BoundaryVisualization;
 import com.griefprevention.visualization.VisualizationType;
 import me.ryanhamshire.GriefPrevention.util.BoundingBox;
 import com.griefprevention.protection.ProtectionHelper;
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -65,12 +64,9 @@ import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
-import org.bukkit.event.inventory.InventoryPickupItemEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.event.world.StructureGrowEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.metadata.MetadataValue;
 import org.bukkit.projectiles.BlockProjectileSource;
 import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.NotNull;
@@ -81,7 +77,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -1205,36 +1200,6 @@ public class BlockEventHandler implements Listener
 
         //everything else is NOT OK
         dispenseEvent.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onInventoryPickupItem(InventoryPickupItemEvent event)
-    {
-        // Prevent hoppers from taking items dropped by players upon death.
-        if (event.getInventory().getType() != InventoryType.HOPPER)
-        {
-            return;
-        }
-
-        List<MetadataValue> meta = event.getItem().getMetadata("GP_ITEMOWNER");
-        // We only care about an item if it has been flagged as belonging to a player.
-        if (meta.isEmpty())
-        {
-            return;
-        }
-
-        UUID itemOwnerId = (UUID) meta.get(0).value();
-        // Determine if the owner has unlocked their dropped items.
-        // This first requires that the player is logged in.
-        if (Bukkit.getServer().getPlayer(itemOwnerId) != null)
-        {
-            PlayerData itemOwner = dataStore.getPlayerData(itemOwnerId);
-            // If locked, don't allow pickup
-            if (!itemOwner.dropsAreUnlocked)
-            {
-                event.setCancelled(true);
-            }
-        }
     }
 
     @EventHandler(ignoreCancelled = true)

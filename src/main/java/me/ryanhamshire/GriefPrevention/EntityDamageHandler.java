@@ -129,14 +129,6 @@ public class EntityDamageHandler implements Listener
         if (event.damaged() instanceof Donkey && !instance.config_claims_protectDonkeys) return;
         if (event.damaged() instanceof Mule && !instance.config_claims_protectDonkeys) return;
         if (event.damaged() instanceof Llama && !instance.config_claims_protectLlamas) return;
-        //protected death loot can't be destroyed, only picked up or despawned due to expiration
-        if (event.damaged().getType() == EntityType.ITEM)
-        {
-            if (event.damaged().hasMetadata("GP_ITEMOWNER"))
-            {
-                event.setCancelled(true);
-            }
-        }
 
         // Handle environmental damage to tamed animals that could easily be caused maliciously.
         if (handlePetDamageByEnvironment(event)) return;

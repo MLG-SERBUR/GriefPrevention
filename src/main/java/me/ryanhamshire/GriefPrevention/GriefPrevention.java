@@ -98,9 +98,6 @@ public class GriefPrevention extends JavaPlugin
     EntityEventHandler entityEventHandler;
     EntityDamageHandler entityDamageHandler;
 
-    //this tracks item stacks expected to drop which will need protection
-    ArrayList<PendingItemProtection> pendingItemWatchList = new ArrayList<>();
-
     //log entry manager for GP's custom log files
     CustomLogger customLogger;
 
@@ -183,9 +180,6 @@ public class GriefPrevention extends JavaPlugin
     public boolean config_pvp_allowFireNearPlayers;                 //whether players may start flint/steel fires near other players in pvp worlds
     public boolean config_pvp_allowFireNearPlayers_NonPvp;            //whether this applies in non-PVP rules worlds <ArchdukeLiamus>
     public boolean config_pvp_protectPets;                          //whether players may damage pets outside of land claims in pvp worlds
-
-    public boolean config_lockDeathDropsInPvpWorlds;                //whether players' dropped on death items are protected in pvp worlds
-    public boolean config_lockDeathDropsInNonPvpWorlds;             //whether players' dropped on death items are protected in non-pvp worlds
 
     public boolean config_blockClaimExplosions;                     //whether explosions may destroy claimed blocks
     public boolean config_blockSurfaceCreeperExplosions;            //whether creeper explosions near or above the surface destroy blocks
@@ -637,9 +631,6 @@ public class GriefPrevention extends JavaPlugin
         this.config_pvp_allowCombatItemDrop = config.getBoolean("GriefPrevention.PvP.AllowCombatItemDrop", false);
         String bannedPvPCommandsList = config.getString("GriefPrevention.PvP.BlockedSlashCommands", "/home;/vanish;/spawn;/tpa");
 
-        this.config_lockDeathDropsInPvpWorlds = config.getBoolean("GriefPrevention.ProtectItemsDroppedOnDeath.PvPWorlds", false);
-        this.config_lockDeathDropsInNonPvpWorlds = config.getBoolean("GriefPrevention.ProtectItemsDroppedOnDeath.NonPvPWorlds", true);
-
         this.config_blockClaimExplosions = config.getBoolean("GriefPrevention.BlockLandClaimExplosions", true);
         this.config_blockSurfaceCreeperExplosions = config.getBoolean("GriefPrevention.BlockSurfaceCreeperExplosions", true);
         this.config_blockSurfaceOtherExplosions = config.getBoolean("GriefPrevention.BlockSurfaceOtherExplosions", true);
@@ -805,9 +796,6 @@ public class GriefPrevention extends JavaPlugin
         outConfig.set("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.PvPWorlds", this.config_pvp_allowFireNearPlayers);
         outConfig.set("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.NonPvPWorlds", this.config_pvp_allowFireNearPlayers_NonPvp);
         outConfig.set("GriefPrevention.PvP.ProtectPetsOutsideLandClaims", this.config_pvp_protectPets);
-
-        outConfig.set("GriefPrevention.ProtectItemsDroppedOnDeath.PvPWorlds", this.config_lockDeathDropsInPvpWorlds);
-        outConfig.set("GriefPrevention.ProtectItemsDroppedOnDeath.NonPvPWorlds", this.config_lockDeathDropsInNonPvpWorlds);
 
         outConfig.set("GriefPrevention.BlockLandClaimExplosions", this.config_blockClaimExplosions);
         outConfig.set("GriefPrevention.BlockSurfaceCreeperExplosions", this.config_blockSurfaceCreeperExplosions);
@@ -1898,34 +1886,6 @@ public class GriefPrevention extends JavaPlugin
                     GriefPrevention.sendMessage(player, TextMode.Instr, getfriendlyLocationString(claim.getLesserBoundaryCorner()));
                 }
             }
-
-            return true;
-        }
-
-        //unlockItems
-        else if (cmd.getName().equalsIgnoreCase("unlockdrops") && player != null)
-        {
-            PlayerData playerData;
-
-            if (player.hasPermission("griefprevention.unlockothersdrops") && args.length == 1)
-            {
-                Player otherPlayer = Bukkit.getPlayer(args[0]);
-                if (otherPlayer == null)
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.PlayerNotFound2);
-                    return true;
-                }
-
-                playerData = this.dataStore.getPlayerData(otherPlayer.getUniqueId());
-                GriefPrevention.sendMessage(player, TextMode.Success, Messages.DropUnlockOthersConfirmation, otherPlayer.getName());
-            }
-            else
-            {
-                playerData = this.dataStore.getPlayerData(player.getUniqueId());
-                GriefPrevention.sendMessage(player, TextMode.Success, Messages.DropUnlockConfirmation);
-            }
-
-            playerData.dropsAreUnlocked = true;
 
             return true;
         }
