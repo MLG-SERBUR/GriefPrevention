@@ -276,32 +276,23 @@ public class EntityEventHandler implements Listener
 
         ProjectileSource shooter = projectile.getShooter();
 
-        if (shooter instanceof Player)
-        {
-            Supplier<String> denial = claim.checkPermission((Player) shooter, ClaimPermission.Build, event);
-
-            // If the player cannot place the material being broken, disallow.
-            if (denial != null)
-            {
-                // Unlike entities where arrows rebound and may cause multiple alerts,
-                // projectiles lodged in blocks do not continuously re-trigger events.
-                GriefPrevention.sendMessage((Player) shooter, TextMode.Err, denial.get());
-                event.setCancelled(true);
-            }
-
-            return;
-        }
-
-        // Allow change if projectile was shot by a dispenser in the same claim.
-        if (ProtectionHelper.isBlockSourceInClaim(shooter, claim))
-            return;
-
         // Allow change if the config value is set, to enable things like TNT music disc farms on claims.
         if (GriefPrevention.instance.config_mobProjectilesChangeBlocks && shooter instanceof Mob)
             return;
 
-        // Prevent change in all other cases.
+        // Single funnel: trusted player and same-claim dispenser may change blocks.
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                shooter, block.getLocation(), ClaimPermission.Build, event, claim);
+        if (decision.allowed()) return;
+
+        // Unlike entities where arrows rebound and may cause multiple alerts,
+        // projectiles lodged in blocks do not continuously re-trigger events.
         event.setCancelled(true);
+        if (shooter instanceof Player shooterPlayer
+                && decision.denial() != null && !decision.denial().get().isEmpty())
+        {
+            GriefPrevention.sendMessage(shooterPlayer, TextMode.Err, decision.denial().get());
+        }
     }
 
     private void handleEntityMeltPowderedSnow(@NotNull EntityChangeBlockEvent event)
@@ -432,24 +423,12 @@ public class EntityEventHandler implements Listener
             // Always ignore air blocks.
             if (block.getType().isAir()) continue;
 
-            Claim claim = this.dataStore.getClaimAt(block.getLocation(), false, cachedClaim);
-
-            // Is it in a land claim?
-            if (claim == null) continue;
-
-            cachedClaim = claim;
-
-            if (player == null)
-            {
-                // If the source is not part of the claim, prevent interaction.
-                if (!ProtectionHelper.isBlockSourceInClaim(source, claim))
-                    removed.add(block);
-                continue;
-            }
-
-            // If the player is not allowed to interact with blocks, prevent interaction.
-            if (claim.checkPermission(player, ClaimPermission.Access, event) != null)
-                removed.add(block);
+            // Single funnel: trusted player and same-claim dispenser may interact.
+            // Wilderness stays allowed, matching the old claim==null skip.
+            ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                    source, block.getLocation(), ClaimPermission.Access, event, cachedClaim);
+            if (decision.claim() != null) cachedClaim = decision.claim();
+            if (!decision.allowed()) removed.add(block);
         }
 
         if (playerData != null && cachedClaim != null)

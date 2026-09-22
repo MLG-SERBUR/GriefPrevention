@@ -768,11 +768,10 @@ public class BlockEventHandler implements Listener
             ProjectileSource shooter = ((Fireball) igniteEvent.getIgnitingEntity()).getShooter();
             if (shooter instanceof BlockProjectileSource)
             {
-                Claim claim = GriefPrevention.instance.dataStore.getClaimAt(igniteEvent.getBlock().getLocation(), false, null);
-                if (claim != null && GriefPrevention.instance.dataStore.getClaimAt(((BlockProjectileSource) shooter).getBlock().getLocation(), false, claim) == claim)
-                {
-                    return;
-                }
+                ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                        shooter, igniteEvent.getBlock().getLocation(), ClaimPermission.Build, igniteEvent);
+                // Claimed and allowed: same-claim dispenser. Anything else falls through below.
+                if (decision.claim() != null && decision.allowed()) return;
             }
         }
 
