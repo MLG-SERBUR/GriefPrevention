@@ -652,14 +652,16 @@ public class EntityEventHandler implements Listener
     public void onEntityPickup(EntityChangeBlockEvent event)
     {
         //FEATURE: endermen don't steal claimed blocks
-
         //if its an enderman
         if (event.getEntity().getType() == EntityType.ENDERMAN)
         {
-            //and the block is claimed
-            if (this.dataStore.getClaimAt(event.getBlock().getLocation(), false, null) != null)
+            //and the block is claimed, he doesn't get to steal it
+            if (!ProtectionHelper.checkClaimedAction(
+                    ProtectionHelper.resolveSource(event.getEntity(), null),
+                    event.getBlock().getLocation(),
+                    ClaimPermission.Build,
+                    event).allowed())
             {
-                //he doesn't get to steal it
                 event.setCancelled(true);
             }
         }
