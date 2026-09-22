@@ -259,19 +259,17 @@ public class BlockEventHandler implements Listener
         if (noBuildReason != null)
         {
             // Allow players with container trust to place books in lecterns
-            PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(block.getLocation(), true, playerData.lastClaim);
             if (block.getType() == Material.LECTERN && placeEvent.getBlockReplacedState().getType() == Material.LECTERN)
             {
-                if (claim != null)
-                {
-                    playerData.lastClaim = claim;
-                    Supplier<String> noContainerReason = claim.checkPermission(player, ClaimPermission.Container, placeEvent);
-                    if (noContainerReason == null)
-                        return;
+                ProtectionHelper.ClaimDecision bookDecision = ProtectionHelper.checkClaimedAction(
+                        player, block.getLocation(), ClaimPermission.Container, placeEvent);
+                if (bookDecision.allowed())
+                    return;
 
+                if (bookDecision.denial() != null && !bookDecision.denial().get().isEmpty())
+                {
                     placeEvent.setCancelled(true);
-                    GriefPrevention.sendMessage(player, TextMode.Err, noContainerReason.get());
+                    GriefPrevention.sendMessage(player, TextMode.Err, bookDecision.denial().get());
                     return;
                 }
             }
@@ -1186,7 +1184,8 @@ public class BlockEventHandler implements Listener
         }
 
         // Cancels the event if in a claim, as we can not efficiently retrieve the person/entity who broke the Item Frame/Hangable Item.
-        if (this.dataStore.getClaimAt(event.getEntity().getLocation(), false, null) != null)
+        if (!ProtectionHelper.checkClaimedAction(
+                null, event.getEntity().getLocation(), ClaimPermission.Build, event).allowed())
         {
             event.setCancelled(true);
         }
