@@ -648,59 +648,49 @@ public class EntityDamageHandler implements Listener
             return true;
         }
 
-        Claim cachedClaim = null;
-        PlayerData playerData = null;
-        if (attacker != null)
-        {
-            playerData = this.dataStore.getPlayerData(attacker.getUniqueId());
-            cachedClaim = playerData.lastClaim;
-        }
+        // Ownership beats the farm rule: tamed pets stay denied even for same-claim dispensers.
+        ProjectileSource source = ProtectionHelper.resolveSource(damageSource, attacker);
+        if (event.damaged() instanceof Tameable tameable && tameable.isTamed())
+            source = null;
 
-        Claim claim = this.dataStore.getClaimAt(event.damaged().getLocation(), false, cachedClaim);
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                source, event.damaged().getLocation(), ClaimPermission.Container, event.original());
 
-        // Require a claim to handle.
-        if (claim == null) return false;
+        // Allowed (trusted player, same-claim dispenser, or wilderness): handled, stop the chain.
+        if (decision.allowed()) return true;
 
-        // If damaged by anything other than a player, cancel the event.
+        event.setCancelled(true);
+
+        // Always remove projectiles shot by non-players, ground player ones to stop infinite bounce.
         if (attacker == null)
         {
-            event.setCancelled(true);
-            // Always remove projectiles shot by non-players.
             if (arrow != null) arrow.remove();
             return true;
         }
-
-        //cache claim for later
-        playerData.lastClaim = claim;
+        preventInfiniteBounce(arrow, event.damaged());
 
         // Do not message players about fireworks to prevent spam due to multi-hits.
         sendMessages &= damageSourceType != EntityType.FIREWORK_ROCKET;
 
-        Supplier<String> override = null;
         if (sendMessages)
         {
             final Player finalAttacker = attacker;
-            override = () ->
+            final Claim deniedClaim = decision.claim();
+            final Supplier<String> defaultDenial = decision.denial();
+            String message;
+            if (deniedClaim != null)
             {
-                String message = dataStore.getMessage(Messages.NoDamageClaimedEntity, claim.getOwnerName());
+                message = dataStore.getMessage(Messages.NoDamageClaimedEntity, deniedClaim.getOwnerName());
                 if (finalAttacker.hasPermission("griefprevention.ignoreclaims"))
                     message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
-                return message;
-            };
+            }
+            else if (defaultDenial != null && !defaultDenial.get().isEmpty())
+            {
+                message = defaultDenial.get();
+            }
+            else return true;
+            GriefPrevention.sendMessage(attacker, TextMode.Err, message);
         }
-
-        // Check for permission to access containers.
-        Supplier<String> noContainersReason = claim.checkPermission(attacker, ClaimPermission.Container, event.original(), override);
-
-        // If player has permission, action is allowed.
-        if (noContainersReason == null) return true;
-
-        event.setCancelled(true);
-
-        // Prevent projectiles from bouncing infinitely.
-        preventInfiniteBounce(arrow, event.damaged());
-
-        if (sendMessages) GriefPrevention.sendMessage(attacker, TextMode.Err, noContainersReason.get());
 
         return true;
     }
