@@ -715,19 +715,19 @@ public class EntityEventHandler implements Listener
         //who is removing it?
         Entity remover = entityEvent.getRemover();
 
-        //again, making sure the breaker is a player
-        if (!(remover instanceof Player playerRemover))
-        {
-            event.setCancelled(true);
-            return;
-        }
+        // Single funnel: trusted player and same-claim dispenser projectiles may break hangings.
+        ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+                ProtectionHelper.resolveSource(remover, remover instanceof Player player ? player : null),
+                event.getEntity().getLocation(),
+                ClaimPermission.Build,
+                event);
+        if (decision.allowed()) return;
 
-        //if the player doesn't have build permission, don't allow the breakage
-        Supplier<String> noBuildReason = ProtectionHelper.checkPermission(playerRemover, event.getEntity().getLocation(), ClaimPermission.Build, event);
-        if (noBuildReason != null)
+        event.setCancelled(true);
+        if (remover instanceof Player playerRemover
+                && decision.denial() != null && !decision.denial().get().isEmpty())
         {
-            event.setCancelled(true);
-            GriefPrevention.sendMessage(playerRemover, TextMode.Err, noBuildReason.get());
+            GriefPrevention.sendMessage(playerRemover, TextMode.Err, decision.denial().get());
         }
     }
 
