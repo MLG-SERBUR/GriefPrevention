@@ -64,7 +64,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.metadata.MetadataValue;
-import org.bukkit.projectiles.BlockProjectileSource;
 import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -294,7 +293,7 @@ public class EntityEventHandler implements Listener
         }
 
         // Allow change if projectile was shot by a dispenser in the same claim.
-        if (isBlockSourceInClaim(shooter, claim))
+        if (ProtectionHelper.isBlockSourceInClaim(shooter, claim))
             return;
 
         // Allow change if the config value is set, to enable things like TNT music disc farms on claims.
@@ -337,12 +336,6 @@ public class EntityEventHandler implements Listener
             // Possible to handle by tagging entities during combustion, but likely not worth it.
             event.setCancelled(true);
         }
-    }
-
-    static boolean isBlockSourceInClaim(@Nullable ProjectileSource projectileSource, @Nullable Claim claim)
-    {
-        return projectileSource instanceof BlockProjectileSource &&
-                GriefPrevention.instance.dataStore.getClaimAt(((BlockProjectileSource) projectileSource).getBlock().getLocation(), false, claim) == claim;
     }
 
     //don't allow zombies to break down doors
@@ -449,7 +442,7 @@ public class EntityEventHandler implements Listener
             if (player == null)
             {
                 // If the source is not part of the claim, prevent interaction.
-                if (!isBlockSourceInClaim(source, claim))
+                if (!ProtectionHelper.isBlockSourceInClaim(source, claim))
                     removed.add(block);
                 continue;
             }

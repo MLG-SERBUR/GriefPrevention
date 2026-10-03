@@ -1,5 +1,6 @@
 package me.ryanhamshire.GriefPrevention;
 
+import com.griefprevention.protection.ProtectionHelper;
 import me.ryanhamshire.GriefPrevention.events.PreventPvPEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -955,7 +956,7 @@ public class EntityDamageHandler implements Listener
                             if (thrower == null)
                             {
                                 // Non-player source: Witches, dispensers, etc.
-                                if (!EntityEventHandler.isBlockSourceInClaim(projectileSource, claim))
+                                if (!ProtectionHelper.isBlockSourceInClaim(projectileSource, claim))
                                 {
                                     // If the source is not a block in the same claim as the affected entity, disallow.
                                     event.setIntensity(affected, 0);

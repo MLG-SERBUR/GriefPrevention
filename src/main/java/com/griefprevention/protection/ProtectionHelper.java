@@ -16,6 +16,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.projectiles.BlockProjectileSource;
+import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -28,6 +30,16 @@ public final class ProtectionHelper
 {
 
     private ProtectionHelper() {}
+
+    /**
+     * Check whether a dispenser (or other block source) sits in the same claim.
+     * Moved from EntityEventHandler so all guards share one funnel.
+     */
+    public static boolean isBlockSourceInClaim(@Nullable ProjectileSource projectileSource, @Nullable Claim claim)
+    {
+        return projectileSource instanceof BlockProjectileSource &&
+                GriefPrevention.instance.dataStore.getClaimAt(((BlockProjectileSource) projectileSource).getBlock().getLocation(), false, claim) == claim;
+    }
 
     /**
      * Check the {@link ClaimPermission} state for a {@link Player} at a particular {@link Location}.
