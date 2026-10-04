@@ -242,6 +242,155 @@ event objects.
 options map handled "extinguish the source" as part of the decision. Here that side
 effect would live in the guard, and no guard does it today.
 
+### 2.5 Using the branch funnel
+
+Everything below is branch code, copy-paste ready. `docs/funnel.md` has the same
+guards shown before-and-after; here they are as patterns to reuse.
+
+The decision method itself, in full:
+
+```java
+public static @NotNull ClaimDecision checkClaimedAction(
+        @Nullable ProjectileSource source,
+        @NotNull Location target,
+        @NotNull ClaimPermission permission,
+        @Nullable Event trigger,
+        @Nullable Claim cachedClaim)
+{
+    World world = target.getWorld();
+    if (world == null || !GriefPrevention.instance.claimsEnabledForWorld(world))
+        return new ClaimDecision(null, null);
+
+    if (source instanceof Player player)
+    {
+        Supplier<String> denial = checkPermission(player, target, permission, trigger);
+        // Extra lookup only on deny (rare) so custom messages keep the owner name.
+        Claim deniedClaim = denial == null ? null : GriefPrevention.instance.dataStore.getClaimAt(target, false, null);
+        return new ClaimDecision(denial, deniedClaim);
+    }
+
+    Claim claim = GriefPrevention.instance.dataStore.getClaimAt(target, false, cachedClaim);
+    if (claim == null) return new ClaimDecision(null, null);
+
+    if (isBlockSourceInClaim(source, claim)) return new ClaimDecision(null, claim);
+
+    return new ClaimDecision(() -> "", claim);
+}
+```
+
+**Pattern A: unattributed guard.** No player to message, cancel on deny. From
+`EntityEventHandler#onEntityPickup`:
+
+```java
+//and the block is claimed, he doesn't get to steal it
+if (!ProtectionHelper.checkClaimedAction(
+        ProtectionHelper.resolveSource(event.getEntity(), null),
+        event.getBlock().getLocation(),
+        ClaimPermission.Build,
+        event).allowed())
+{
+    event.setCancelled(true);
+}
+```
+
+**Pattern B: player guard with owner-name message.** From
+`PlayerEventHandler#onPlayerInteractEntity` (leash):
+
+```java
+ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+        player, entity.getLocation(), ClaimPermission.Container, event);
+if (!decision.allowed() && decision.denial() != null && !decision.denial().get().isEmpty())
+{
+    event.setCancelled(true);
+    GriefPrevention.sendMessage(player, TextMode.Err, decision.denial().get());
+    return;
+}
+```
+
+Where the message must name the owner, read `decision.claim()`. From
+`EntityDamageHandler#handleCreatureDamageByEntity`:
+
+```java
+if (deniedClaim != null)
+{
+    message = dataStore.getMessage(Messages.NoDamageClaimedEntity, deniedClaim.getOwnerName());
+    if (finalAttacker.hasPermission("griefprevention.ignoreclaims"))
+        message += "  " + dataStore.getMessage(Messages.IgnoreClaimsAdvertisement);
+}
+```
+
+`deniedClaim` is `decision.claim()` captured into a final local. No second lookup.
+
+**Pattern C: loop with a cached claim.** Thread the claim back out so a multi-block
+pass costs one lookup per claim boundary. From the potion splash loop:
+
+```java
+ProtectionHelper.ClaimDecision decision = ProtectionHelper.checkClaimedAction(
+        projectileSource, affected.getLocation(), ClaimPermission.Container, event, cachedClaim);
+if (decision.claim() != null) cachedClaim = decision.claim();
+if (decision.allowed()) continue;
+
+event.setIntensity(affected, 0);
+```
+
+**Pattern D: covering new Minecraft content.** One set entry, zero handler edits.
+The set:
+
+```java
+public static final Set<Material> PROJECTILE_BREAKABLE_BLOCKS = Set.copyOf(EnumSet.of(
+        Material.CHORUS_FLOWER,
+        Material.DECORATED_POT));
+```
+
+The single use site, in `BlockEventHandler#chorusFlower`:
+
+```java
+// Ensure projectile affects block. New MC blocks go in
+// ProtectionHelper.PROJECTILE_BREAKABLE_BLOCKS, no edit here.
+if (block == null || !ProtectionHelper.PROJECTILE_BREAKABLE_BLOCKS.contains(block.getType()))
+    return;
+```
+
+For new entities, prefer the supertype the guards already match on
+(`instanceof Hanging`, `instanceof Projectile`, `instanceof Animals`) over adding an
+`EntityType` branch. A new hanging or projectile type is then covered with no edit
+at all.
+
+**Pattern E: testing a funnel decision.** From `ProtectionHelperTest`:
+
+```java
+@Test
+void dispenserInSameClaimAllows()
+{
+    Claim claim = mock(Claim.class);
+    Location dispenserLocation = mock(Location.class);
+    Block dispenserBlock = mock(Block.class);
+    when(dispenserBlock.getLocation()).thenReturn(dispenserLocation);
+    BlockProjectileSource source = mock(BlockProjectileSource.class);
+    when(source.getBlock()).thenReturn(dispenserBlock);
+
+    when(dataStore.getClaimAt(eq(target), eq(false), eq(null))).thenReturn(claim);
+    when(dataStore.getClaimAt(eq(dispenserLocation), eq(false), eq(claim))).thenReturn(claim);
+
+    ProtectionHelper.ClaimDecision decision =
+            ProtectionHelper.checkClaimedAction(source, target, ClaimPermission.Build, trigger);
+    assertTrue(decision.allowed());
+    assertSame(claim, decision.claim());
+}
+```
+
+**Pattern F: the addon hook as it stands today.** Addons listen for
+`ClaimPermissionCheckEvent`, which `Claim#checkPermission` fires on the player path:
+
+```java
+return callPermissionCheck(new ClaimPermissionCheckEvent(player, this, permission, event), denialOverride);
+```
+
+An addon overrides the verdict through the event's denial reason. Limitation, stated
+plainly: the event carries a player or UUID, so dispensers, mobs, and unattributed
+sources never reach addon listeners. Generalising this event is follow-up 5.1 below;
+until then the funnel decides non-player cases alone.
+
 ## 3. Head to head
 
 | | dev/v20 | This branch |
