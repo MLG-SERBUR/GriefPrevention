@@ -1857,10 +1857,6 @@ class PlayerEventHandler implements Listener
                     //if permission, tell about the player's offline time
                     if (!claim.isAdminClaim() && (player.hasPermission("griefprevention.deleteclaims") || player.hasPermission("griefprevention.seeinactivity")))
                     {
-                        if (claim.parent != null)
-                        {
-                            claim = claim.parent;
-                        }
                         Date lastLogin = new Date(Bukkit.getOfflinePlayer(claim.ownerID).getLastPlayed());
                         Date now = new Date();
                         long daysElapsed = (now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24);
@@ -1948,13 +1944,13 @@ class PlayerEventHandler implements Listener
                 return;
             }
 
-            //otherwise, since not currently resizing a claim, must be starting a resize, creating a new claim, or creating a subdivision
+            //otherwise, since not currently resizing a claim, must be starting a resize or creating a new claim
             Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), true /*ignore height*/, playerData.lastClaim);
 
             //if within an existing claim, he's not creating a new one
             if (claim != null)
             {
-                //if the player has permission to edit the claim or subdivision
+                //if the player has permission to edit the claim
                 Supplier<String> noEditReason = claim.checkPermission(player, ClaimPermission.Edit, event, () -> instance.dataStore.getMessage(Messages.CreateClaimFailOverlapOtherPlayer, claim.getOwnerName()));
                 if (noEditReason == null)
                 {
@@ -1964,75 +1960,6 @@ class PlayerEventHandler implements Listener
                         playerData.claimResizing = claim;
                         playerData.lastShovelLocation = clickedBlock.getLocation();
                         GriefPrevention.sendMessage(player, TextMode.Instr, Messages.ResizeStart);
-                    }
-
-                    //if he didn't click on a corner and is in subdivision mode, he's creating a new subdivision
-                    else if (playerData.shovelMode == ShovelMode.Subdivide)
-                    {
-                        //if it's the first click, he's trying to start a new subdivision
-                        if (playerData.lastShovelLocation == null)
-                        {
-                            //if the clicked claim was a subdivision, tell him he can't start a new subdivision here
-                            if (claim.parent != null)
-                            {
-                                GriefPrevention.sendMessage(player, TextMode.Err, Messages.ResizeFailOverlapSubdivision);
-                            }
-
-                            //otherwise start a new subdivision
-                            else
-                            {
-                                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SubdivisionStart);
-                                playerData.lastShovelLocation = clickedBlock.getLocation();
-                                playerData.claimSubdividing = claim;
-                            }
-                        }
-
-                        //otherwise, he's trying to finish creating a subdivision by setting the other boundary corner
-                        else
-                        {
-                            //if last shovel location was in a different world, assume the player is starting the create-claim workflow over
-                            if (!playerData.lastShovelLocation.getWorld().equals(clickedBlock.getWorld()))
-                            {
-                                playerData.lastShovelLocation = null;
-                                this.onPlayerInteract(event);
-                                return;
-                            }
-
-                            //try to create a new claim (will return null if this subdivision overlaps another)
-                            CreateClaimResult result = this.dataStore.createClaim(
-                                    player.getWorld(),
-                                    playerData.lastShovelLocation.getBlockX(), clickedBlock.getX(),
-                                    playerData.lastShovelLocation.getBlockY() - instance.config_claims_claimsExtendIntoGroundDistance, clickedBlock.getY() - instance.config_claims_claimsExtendIntoGroundDistance,
-                                    playerData.lastShovelLocation.getBlockZ(), clickedBlock.getZ(),
-                                    null,  //owner is not used for subdivisions
-                                    playerData.claimSubdividing,
-                                    null, player);
-
-                            //if it didn't succeed, tell the player why
-                            if (!result.succeeded || result.claim == null)
-                            {
-                                if (result.claim != null)
-                                {
-                                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.CreateSubdivisionOverlap);
-                                    BoundaryVisualization.visualizeClaim(player, result.claim, VisualizationType.CONFLICT_ZONE, clickedBlock);
-                                }
-                                else
-                                {
-                                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.CreateClaimFailOverlapRegion);
-                                }
-
-                                return;
-                            }
-
-                            //otherwise, advise him on the /trust command and show him his new subdivision
-                            else
-                            {
-                                GriefPrevention.sendMessage(player, TextMode.Success, Messages.SubdivisionSuccess);
-                                BoundaryVisualization.visualizeClaim(player, result.claim, VisualizationType.CLAIM, clickedBlock);
-                                playerData.lastShovelLocation = null;
-                                playerData.claimSubdividing = null;
-                            }
-                        }
                     }
 
                     //otherwise tell him he can't create a claim here, and show him the existing claim
@@ -2156,7 +2083,7 @@ class PlayerEventHandler implements Listener
                         lastShovelLocation.getBlockY() - instance.config_claims_claimsExtendIntoGroundDistance, clickedBlock.getY() - instance.config_claims_claimsExtendIntoGroundDistance,
                         lastShovelLocation.getBlockZ(), clickedBlock.getZ(),
                         playerID,
-                        null, null,
+                        null,
                         player);
 
                 //if it didn't succeed, tell the player why
@@ -2181,13 +2108,6 @@ class PlayerEventHandler implements Listener
                     GriefPrevention.sendMessage(player, TextMode.Success, Messages.CreateClaimSuccess);
                     BoundaryVisualization.visualizeClaim(player, result.claim, VisualizationType.CLAIM, clickedBlock);
                     playerData.lastShovelLocation = null;
-
-                    //if it's a big claim, tell the player about subdivisions
-                    if (!player.hasPermission("griefprevention.adminclaims") && result.claim.getArea() >= 1000)
-                    {
-                        GriefPrevention.sendMessage(player, TextMode.Info, Messages.BecomeMayor, 200L);
-                        GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SubdivisionVideo2, 201L, DataStore.SUBDIVISION_VIDEO_URL);
-                    }
 
                     AutoExtendClaimTask.scheduleAsync(result.claim);
                 }

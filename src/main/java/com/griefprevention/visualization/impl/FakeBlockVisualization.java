@@ -43,7 +43,6 @@ public class FakeBlockVisualization extends BlockBoundaryVisualization
     {
         return addBlockElement(switch (boundary.type())
         {
-            case SUBDIVISION -> Material.IRON_BLOCK.createBlockData();
             case INITIALIZE_ZONE -> Material.DIAMOND_BLOCK.createBlockData();
             case CONFLICT_ZONE -> {
                 BlockData fakeData = Material.REDSTONE_ORE.createBlockData();
@@ -62,7 +61,6 @@ public class FakeBlockVisualization extends BlockBoundaryVisualization
         return addBlockElement(switch (boundary.type())
         {
             case ADMIN_CLAIM -> Material.PUMPKIN.createBlockData();
-            case SUBDIVISION -> Material.WHITE_WOOL.createBlockData();
             case INITIALIZE_ZONE -> Material.DIAMOND_BLOCK.createBlockData();
             case CONFLICT_ZONE -> Material.NETHERRACK.createBlockData();
             default -> Material.GOLD_BLOCK.createBlockData();

@@ -228,14 +228,7 @@ public class EntityEventHandler implements Listener
         if (claim != null)
         {
             // If the claim contains the formation point, allow block to form.
-            if (claim.contains(originalLocation, false, false)) return;
-
-            // If the claim is an unrestricted subclaim and the block is from
-            // within the parent (but not another subclaim!) block may form.
-            if (claim.parent != null && !claim.getSubclaimRestrictions() && claim.parent.contains(originalLocation, false, true))
-            {
-                return;
-            }
+            if (claim.contains(originalLocation, false)) return;
         }
         // If not landing in a claim and claims are not required, allow block to form.
         else if (claimsMode == ClaimsMode.Survival) return;

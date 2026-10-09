@@ -27,7 +27,6 @@ import org.bukkit.block.data.BlockData;
 public enum VisualizationType
 {
     Claim,
-    Subdivision,
     ErrorClaim,
     AdminClaim;
 
@@ -37,7 +36,6 @@ public enum VisualizationType
         return switch (this)
         {
             case Claim -> com.griefprevention.visualization.VisualizationType.CLAIM;
-            case Subdivision -> com.griefprevention.visualization.VisualizationType.SUBDIVISION;
             case ErrorClaim -> com.griefprevention.visualization.VisualizationType.CONFLICT_ZONE;
             case AdminClaim -> com.griefprevention.visualization.VisualizationType.ADMIN_CLAIM;
         };
@@ -46,7 +44,6 @@ public enum VisualizationType
     @Deprecated(forRemoval = true, since = "16.18")
     static com.griefprevention.visualization.VisualizationType ofBlockData(BlockData accent) {
         return switch (accent.getMaterial()) {
-            case WHITE_WOOL -> com.griefprevention.visualization.VisualizationType.SUBDIVISION;
             case NETHERRACK -> com.griefprevention.visualization.VisualizationType.CONFLICT_ZONE;
             case PUMPKIN -> com.griefprevention.visualization.VisualizationType.ADMIN_CLAIM;
             default -> com.griefprevention.visualization.VisualizationType.CLAIM;

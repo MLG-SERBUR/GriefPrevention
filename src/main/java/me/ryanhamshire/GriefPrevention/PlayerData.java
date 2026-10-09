@@ -61,9 +61,6 @@ public class PlayerData
     //the claim this player is currently resizing
     public Claim claimResizing = null;
 
-    //the claim this player is currently subdividing
-    public Claim claimSubdividing = null;
-
     //whether or not the player has a pending /trapped rescue
     public boolean pendingTrapped = false;
 
@@ -93,9 +90,6 @@ public class PlayerData
     //pvp
     public long lastPvpTimestamp = 0;
     public String lastPvpPlayer = "";
-
-    //safety confirmation for deleting multi-subdivision claims
-    public boolean warnedAboutMajorDeletion = false;
 
     public InetAddress ipAddress;
 
@@ -276,20 +270,12 @@ public class PlayerData
                 {
                     Claim remove = dataStore.claims.remove(i--);
                     dataStore.claimIDMap.remove(remove.getID());
-                    for (Claim child : remove.children)
-                    {
-                        dataStore.claimIDMap.remove(child.getID());
-                    }
                     continue;
                 }
                 if (playerID.equals(claim.ownerID))
                 {
                     this.claims.add(claim);
                     dataStore.claimIDMap.put(claim.getID(), claim);
-                    for (Claim child : claim.children)
-                    {
-                        dataStore.claimIDMap.put(child.getID(), child);
-                    }
                     totalClaimsArea += claim.getArea();
                 }
             }

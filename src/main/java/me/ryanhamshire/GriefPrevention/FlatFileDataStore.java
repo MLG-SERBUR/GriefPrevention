@@ -41,7 +41,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 
 //manages data stored in the file system
@@ -249,12 +248,11 @@ public class FlatFileDataStore extends DataStore
                 String lesserCornerString = "";
                 try
                 {
-                    Claim topLevelClaim = null;
-
                     inStream = new BufferedReader(new FileReader(files[i].getAbsolutePath()));
                     String line = inStream.readLine();
+                    boolean claimLoaded = false;
 
-                    while (line != null)
+                    while (line != null && !claimLoaded)
                     {
                         //skip any SUB:### lines from previous versions
                         if (line.toLowerCase().startsWith("sub:"))
@@ -283,7 +281,7 @@ public class FlatFileDataStore extends DataStore
                         UUID ownerID = null;
                         if (ownerName.isEmpty() || ownerName.startsWith("--"))
                         {
-                            ownerID = null;  //administrative land claim or subdivision
+                            ownerID = null;  //administrative land claim
                         }
                         else if (this.getSchemaVersion() == 0)
                         {
@@ -331,34 +329,19 @@ public class FlatFileDataStore extends DataStore
                         List<String> managerNames = Arrays.asList(line.split(";"));
                         managerNames = this.convertNameListToUUIDList(managerNames);
 
-                        //skip any remaining extra lines, until the "===" string, indicating the end of this claim or subdivision
+                        //skip any remaining extra lines, until the "===" string, indicating the end of this claim
                         line = inStream.readLine();
                         while (line != null && !line.contains("==="))
                             line = inStream.readLine();
 
                         //build a claim instance from those data
-                        //if this is the first claim loaded from this file, it's the top level claim
-                        if (topLevelClaim == null)
-                        {
-                            //instantiate
-                            topLevelClaim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderNames, containerNames, accessorNames, managerNames, claimID);
+                        Claim claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderNames, containerNames, accessorNames, managerNames, claimID);
 
-                            topLevelClaim.modifiedDate = new Date(files[i].lastModified());
-                            this.addClaim(topLevelClaim, false);
-                        }
+                        claim.modifiedDate = new Date(files[i].lastModified());
+                        this.addClaim(claim, false);
+                        claimLoaded = true;
 
-                        //otherwise there's already a top level claim, so this must be a subdivision of that top level claim
-                        else
-                        {
-                            Claim subdivision = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, null, builderNames, containerNames, accessorNames, managerNames, null);
-
-                            subdivision.modifiedDate = new Date(files[i].lastModified());
-                            subdivision.parent = topLevelClaim;
-                            topLevelClaim.children.add(subdivision);
-                            subdivision.inDataStore = true;
-                        }
-
-                        //move up to the first line in the next subdivision
+                        //move up to the first line in the next claim
                         line = inStream.readLine();
                     }
 
@@ -394,7 +377,6 @@ public class FlatFileDataStore extends DataStore
 
     void loadClaimData(File[] files) throws Exception
     {
-        ConcurrentHashMap<Claim, Long> orphans = new ConcurrentHashMap<>();
         for (int i = 0; i < files.length; i++)
         {
             if (files[i].isFile())  //avoids folders
@@ -430,16 +412,8 @@ public class FlatFileDataStore extends DataStore
 
                 try
                 {
-                    ArrayList<Long> out_parentID = new ArrayList<>();  //hacky output parameter
-                    Claim claim = this.loadClaim(files[i], out_parentID, claimID);
-                    if (out_parentID.isEmpty() || out_parentID.get(0) == -1)
-                    {
-                        this.addClaim(claim, false);
-                    }
-                    else
-                    {
-                        orphans.put(claim, out_parentID.get(0));
-                    }
+                    Claim claim = this.loadClaim(files[i], claimID);
+                    this.addClaim(claim, false);
                 }
 
                 //if there's any problem with the file's content, log an error message and skip it
@@ -458,20 +432,9 @@ public class FlatFileDataStore extends DataStore
                 }
             }
         }
-
-        //link children to parents
-        for (Claim child : orphans.keySet())
-        {
-            Claim parent = this.getClaim(orphans.get(child));
-            if (parent != null)
-            {
-                child.parent = parent;
-                this.addClaim(child, false);
-            }
-        }
     }
 
-    Claim loadClaim(File file, ArrayList<Long> out_parentID, long claimID) throws IOException, InvalidConfigurationException, Exception
+    Claim loadClaim(File file, long claimID) throws IOException, InvalidConfigurationException, Exception
     {
         List<String> lines = Files.readLines(file, StandardCharsets.UTF_8);
         StringBuilder builder = new StringBuilder();
@@ -480,10 +443,10 @@ public class FlatFileDataStore extends DataStore
             builder.append(line).append('\n');
         }
 
-        return this.loadClaim(builder.toString(), out_parentID, file.lastModified(), claimID, Bukkit.getServer().getWorlds());
+        return this.loadClaim(builder.toString(), file.lastModified(), claimID, Bukkit.getServer().getWorlds());
     }
 
-    Claim loadClaim(String input, ArrayList<Long> out_parentID, long lastModifiedDate, long claimID, List<World> validWorlds) throws InvalidConfigurationException, Exception
+    Claim loadClaim(String input, long lastModifiedDate, long claimID, List<World> validWorlds) throws InvalidConfigurationException, Exception
     {
         Claim claim = null;
         YamlConfiguration yaml = new YamlConfiguration();
@@ -517,12 +480,8 @@ public class FlatFileDataStore extends DataStore
 
         List<String> managers = yaml.getStringList("Managers");
 
-        boolean inheritNothing = yaml.getBoolean("inheritNothing");
-
-        out_parentID.add(yaml.getLong("Parent Claim ID", -1L));
-
         //instantiate
-        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, inheritNothing, claimID);
+        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, claimID);
         claim.modifiedDate = new Date(lastModifiedDate);
         claim.id = claimID;
 
@@ -552,16 +511,6 @@ public class FlatFileDataStore extends DataStore
         yaml.set("Containers", containers);
         yaml.set("Accessors", accessors);
         yaml.set("Managers", managers);
-
-        Long parentID = -1L;
-        if (claim.parent != null)
-        {
-            parentID = claim.parent.id;
-        }
-
-        yaml.set("Parent Claim ID", parentID);
-
-        yaml.set("inheritNothing", claim.getSubclaimRestrictions());
 
         return yaml.saveToString();
     }
@@ -804,10 +753,6 @@ public class FlatFileDataStore extends DataStore
         for (Claim claim : this.claims)
         {
             databaseStore.addClaim(claim, true);
-            for (Claim child : claim.children)
-            {
-                databaseStore.addClaim(child, true);
-            }
         }
 
         //migrate groups

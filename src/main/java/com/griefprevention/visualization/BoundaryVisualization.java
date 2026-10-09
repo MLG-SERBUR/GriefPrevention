@@ -21,7 +21,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * A representation of a system for displaying rectangular {@link Boundary Boundaries} to {@link Player Players}.
@@ -149,7 +148,7 @@ public abstract class BoundaryVisualization
     }
 
     /**
-     * Helper method for quickly visualizing a claim and all its children.
+     * Helper method for quickly visualizing a claim.
      *
      * @param player the {@link Player} visualizing the area
      * @param claim the {@link Claim} being visualized
@@ -164,7 +163,7 @@ public abstract class BoundaryVisualization
     }
 
     /**
-     * Helper method for quickly visualizing a claim and all its children.
+     * Helper method for quickly visualizing a claim.
      *
      * @param player the {@link Player} visualizing the area
      * @param claim the {@link Claim} being visualized
@@ -181,7 +180,7 @@ public abstract class BoundaryVisualization
     }
 
     /**
-     * Helper method for quickly visualizing a claim and all its children.
+     * Helper method for quickly visualizing a claim.
      *
      * @param player the {@link Player} visualizing the area
      * @param claim the {@link Claim} being visualized
@@ -199,7 +198,7 @@ public abstract class BoundaryVisualization
     }
 
     /**
-     * Define {@link Boundary Boundaries} for a claim and its children.
+     * Define {@link Boundary Boundaries} for a claim.
      *
      * @param claim the {@link Claim}
      * @param type the {@link VisualizationType}
@@ -209,18 +208,10 @@ public abstract class BoundaryVisualization
     {
         if (claim == null) return Set.of();
 
-        // For single claims, always visualize parent and children.
-        if (claim.parent != null) claim = claim.parent;
-
         // Correct visualization type for claim type for simplicity.
         if (type == VisualizationType.CLAIM && claim.isAdminClaim()) type = VisualizationType.ADMIN_CLAIM;
 
-        // Gather all boundaries. It's important that children override parent so
-        // that users can always find children, no matter how oddly sized or positioned.
-        return Stream.concat(
-                Stream.of(new Boundary(claim, type)),
-                claim.children.stream().map(child -> new Boundary(child, VisualizationType.SUBDIVISION)))
-                .collect(Collectors.toSet());
+        return Set.of(new Boundary(claim, type));
     }
 
     /**
