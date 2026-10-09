@@ -39,6 +39,7 @@ public class ClaimCommand extends CommandHandler
         if (!(sender instanceof Player player))
             return false;
 
+        World world = player.getWorld();
         PlayerData playerData = plugin.dataStore.getPlayerData(player.getUniqueId());
 
         //if he's at the claim count per player limit already and doesn't have permission to bypass, display an error message
