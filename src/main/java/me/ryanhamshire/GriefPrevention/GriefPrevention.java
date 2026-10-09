@@ -25,7 +25,6 @@ import com.griefprevention.metrics.MetricsHandler;
 import com.griefprevention.platform.knockback.KnockbackProtectionListener;
 import com.griefprevention.protection.InteractionProtectionHandler;
 import com.griefprevention.protection.ProtectionHelper;
-import me.ryanhamshire.GriefPrevention.DataStore.NoTransferException;
 import me.ryanhamshire.GriefPrevention.events.SaveTrappedPlayerEvent;
 import me.ryanhamshire.GriefPrevention.events.TrustChangedEvent;
 import org.bukkit.BanList;
@@ -177,7 +176,6 @@ public class GriefPrevention extends JavaPlugin
     public ArrayList<String> config_pvp_blockedCommands;            //list of commands which may not be used during pvp combat
     public boolean config_pvp_noCombatInPlayerLandClaims;            //whether players may fight in player-owned land claims
     public boolean config_pvp_noCombatInAdminLandClaims;            //whether players may fight in admin-owned land claims
-    public boolean config_pvp_noCombatInAdminSubdivisions;          //whether players may fight in subdivisions of admin-owned land claims
     public boolean config_pvp_allowLavaNearPlayers;                 //whether players may dump lava near other players in pvp worlds
     public boolean config_pvp_allowLavaNearPlayers_NonPvp;            //whather this applies in non-PVP rules worlds <ArchdukeLiamus>
     public boolean config_pvp_allowFireNearPlayers;                 //whether players may start flint/steel fires near other players in pvp worlds
@@ -705,7 +703,6 @@ public class GriefPrevention extends JavaPlugin
 
         this.config_pvp_noCombatInPlayerLandClaims = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.PlayerOwnedClaims", true);
         this.config_pvp_noCombatInAdminLandClaims = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeClaims", true);
-        this.config_pvp_noCombatInAdminSubdivisions = config.getBoolean("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeSubdivisions", true);
         this.config_pvp_allowLavaNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.PvPWorlds", true);
         this.config_pvp_allowLavaNearPlayers_NonPvp = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.NonPvPWorlds", false);
         this.config_pvp_allowFireNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.PvPWorlds", true);
@@ -799,7 +796,6 @@ public class GriefPrevention extends JavaPlugin
         outConfig.set("GriefPrevention.PvP.BlockedSlashCommands", bannedPvPCommandsList);
         outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.PlayerOwnedClaims", this.config_pvp_noCombatInPlayerLandClaims);
         outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeClaims", this.config_pvp_noCombatInAdminLandClaims);
-        outConfig.set("GriefPrevention.PvP.ProtectPlayersInLandClaims.AdministrativeSubdivisions", this.config_pvp_noCombatInAdminSubdivisions);
         outConfig.set("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.PvPWorlds", this.config_pvp_allowLavaNearPlayers);
         outConfig.set("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers.NonPvPWorlds", this.config_pvp_allowLavaNearPlayers_NonPvp);
         outConfig.set("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers.PvPWorlds", this.config_pvp_allowFireNearPlayers);
@@ -1134,13 +1130,7 @@ public class GriefPrevention extends JavaPlugin
         //abandonclaim
         if (cmd.getName().equalsIgnoreCase("abandonclaim") && player != null)
         {
-            return this.abandonClaimHandler(player, false);
-        }
-
-        //abandontoplevelclaim
-        if (cmd.getName().equalsIgnoreCase("abandontoplevelclaim") && player != null)
-        {
-            return this.abandonClaimHandler(player, true);
+            return this.abandonClaimHandler(player);
         }
 
         //ignoreclaims
@@ -1254,15 +1244,7 @@ public class GriefPrevention extends JavaPlugin
             }
 
             //change ownerhsip
-            try
-            {
-                this.dataStore.changeClaimOwner(claim, newOwnerID);
-            }
-            catch (NoTransferException e)
-            {
-                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.TransferTopLevel);
-                return true;
-            }
+            this.dataStore.changeClaimOwner(claim, newOwnerID);
 
             //confirm
             GriefPrevention.sendMessage(player, TextMode.Success, Messages.TransferSuccess);
@@ -1347,11 +1329,6 @@ public class GriefPrevention extends JavaPlugin
                             ChatColor.YELLOW + this.dataStore.getMessage(Messages.Build) + " " +
                             ChatColor.GREEN + this.dataStore.getMessage(Messages.Containers) + " " +
                             ChatColor.BLUE + this.dataStore.getMessage(Messages.Access));
-
-            if (claim.getSubclaimRestrictions())
-            {
-                GriefPrevention.sendMessage(player, TextMode.Err, Messages.HasSubclaimRestriction);
-            }
 
             return true;
         }
@@ -1571,40 +1548,6 @@ public class GriefPrevention extends JavaPlugin
             return true;
         }
 
-        //restrictsubclaim
-        else if (cmd.getName().equalsIgnoreCase("restrictsubclaim") && player != null)
-        {
-            PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            Claim claim = this.dataStore.getClaimAt(player.getLocation(), true, playerData.lastClaim);
-            if (claim == null || claim.parent == null)
-            {
-                GriefPrevention.sendMessage(player, TextMode.Err, Messages.StandInSubclaim);
-                return true;
-            }
-
-            // If player has /ignoreclaims on, continue
-            // If admin claim, fail if this user is not an admin
-            // If not an admin claim, fail if this user is not the owner
-            if (!playerData.ignoreClaims && (claim.isAdminClaim() ? !player.hasPermission("griefprevention.adminclaims") : !player.getUniqueId().equals(claim.parent.ownerID)))
-            {
-                GriefPrevention.sendMessage(player, TextMode.Err, Messages.OnlyOwnersModifyClaims, claim.getOwnerName());
-                return true;
-            }
-
-            if (claim.getSubclaimRestrictions())
-            {
-                claim.setSubclaimRestrictions(false);
-                GriefPrevention.sendMessage(player, TextMode.Success, Messages.SubclaimUnrestricted);
-            }
-            else
-            {
-                claim.setSubclaimRestrictions(true);
-                GriefPrevention.sendMessage(player, TextMode.Success, Messages.SubclaimRestricted);
-            }
-            this.dataStore.saveClaim(claim);
-            return true;
-        }
-
         //adminclaims
         else if (cmd.getName().equalsIgnoreCase("adminclaims") && player != null)
         {
@@ -1620,20 +1563,7 @@ public class GriefPrevention extends JavaPlugin
         {
             PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
             playerData.shovelMode = ShovelMode.Basic;
-            playerData.claimSubdividing = null;
             GriefPrevention.sendMessage(player, TextMode.Success, Messages.BasicClaimsMode);
-
-            return true;
-        }
-
-        //subdivideclaims
-        else if (cmd.getName().equalsIgnoreCase("subdivideclaims") && player != null)
-        {
-            PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-            playerData.shovelMode = ShovelMode.Subdivide;
-            playerData.claimSubdividing = null;
-            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SubdivisionMode);
-            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SubdivisionVideo2, DataStore.SUBDIVISION_VIDEO_URL);
 
             return true;
         }
@@ -1654,23 +1584,13 @@ public class GriefPrevention extends JavaPlugin
                 if (!claim.isAdminClaim() || player.hasPermission("griefprevention.adminclaims"))
                 {
                     PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
-                    if (!claim.children.isEmpty() && !playerData.warnedAboutMajorDeletion)
-                    {
-                        GriefPrevention.sendMessage(player, TextMode.Warn, Messages.DeletionSubdivisionWarning);
-                        playerData.warnedAboutMajorDeletion = true;
-                    }
-                    else
-                    {
-                        this.dataStore.deleteClaim(claim, true, true);
+                    this.dataStore.deleteClaim(claim, true, true);
 
-                        GriefPrevention.sendMessage(player, TextMode.Success, Messages.DeleteSuccess);
-                        GriefPrevention.AddLogEntry(player.getName() + " deleted " + claim.getOwnerName() + "'s claim at " + GriefPrevention.getfriendlyLocationString(claim.getLesserBoundaryCorner()), CustomLogEntryTypes.AdminActivity);
+                    GriefPrevention.sendMessage(player, TextMode.Success, Messages.DeleteSuccess);
+                    GriefPrevention.AddLogEntry(player.getName() + " deleted " + claim.getOwnerName() + "'s claim at " + GriefPrevention.getfriendlyLocationString(claim.getLesserBoundaryCorner()), CustomLogEntryTypes.AdminActivity);
 
-                        //revert any current visualization
-                        playerData.setVisibleBoundaries(null);
-
-                        playerData.warnedAboutMajorDeletion = false;
-                    }
+                    //revert any current visualization
+                    playerData.setVisibleBoundaries(null);
                 }
                 else
                 {
@@ -2349,7 +2269,7 @@ public class GriefPrevention extends JavaPlugin
         return location.getWorld().getName() + ": x" + location.getBlockX() + ", z" + location.getBlockZ();
     }
 
-    private boolean abandonClaimHandler(Player player, boolean deleteTopLevelClaim)
+    private boolean abandonClaimHandler(Player player)
     {
         PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
@@ -2365,20 +2285,13 @@ public class GriefPrevention extends JavaPlugin
         {
             GriefPrevention.sendMessage(player, TextMode.Err, Messages.NotYourClaim);
         }
-
-        //warn if has children and we're not explicitly deleting a top level claim
-        else if (!claim.children.isEmpty() && !deleteTopLevelClaim)
-        {
-            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.DeleteTopLevelClaim);
-            return true;
-        }
         else
         {
             //delete it
             this.dataStore.deleteClaim(claim, true, false);
 
-            //adjust claim blocks when abandoning a top level claim
-            if (this.config_claims_abandonReturnRatio != 1.0D && claim.parent == null && claim.ownerID.equals(playerData.playerID))
+            //adjust claim blocks when abandoning a claim
+            if (this.config_claims_abandonReturnRatio != 1.0D && claim.ownerID != null && claim.ownerID.equals(playerData.playerID))
             {
                 playerData.setAccruedClaimBlocks(playerData.getAccruedClaimBlocks() - (int) Math.ceil((claim.getArea() * (1 - this.config_claims_abandonReturnRatio))));
             }
@@ -2389,8 +2302,6 @@ public class GriefPrevention extends JavaPlugin
 
             //revert any current visualization
             playerData.setVisibleBoundaries(null);
-
-            playerData.warnedAboutMajorDeletion = false;
         }
 
         return true;
@@ -3073,8 +2984,7 @@ public class GriefPrevention extends JavaPlugin
 
     public boolean claimIsPvPSafeZone(Claim claim)
     {
-        return claim.isAdminClaim() && claim.parent == null && GriefPrevention.instance.config_pvp_noCombatInAdminLandClaims ||
-                claim.isAdminClaim() && claim.parent != null && GriefPrevention.instance.config_pvp_noCombatInAdminSubdivisions ||
+        return claim.isAdminClaim() && GriefPrevention.instance.config_pvp_noCombatInAdminLandClaims ||
                 !claim.isAdminClaim() && GriefPrevention.instance.config_pvp_noCombatInPlayerLandClaims;
     }
 
