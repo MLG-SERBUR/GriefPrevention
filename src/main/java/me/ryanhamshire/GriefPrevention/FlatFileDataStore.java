@@ -84,42 +84,6 @@ public class FlatFileDataStore extends DataStore
             this.setSchemaVersion(DataStore.latestSchemaVersion);
         }
 
-        //load group data into memory
-        File[] files = playerDataFolder.listFiles();
-        for (File file : files)
-        {
-            if (!file.isFile()) continue;  //avoids folders
-
-            //all group data files start with a dollar sign.  ignoring the rest, which are player data files.
-            if (!file.getName().startsWith("$")) continue;
-
-            String groupName = file.getName().substring(1);
-            if (groupName == null || groupName.isEmpty()) continue;  //defensive coding, avoid unlikely cases
-
-            BufferedReader inStream = null;
-            try
-            {
-                inStream = new BufferedReader(new FileReader(file.getAbsolutePath()));
-                String line = inStream.readLine();
-
-                int groupBonusBlocks = Integer.parseInt(line);
-
-                this.permissionToBonusBlocksMap.put(groupName, groupBonusBlocks);
-            }
-            catch (Exception e)
-            {
-                StringWriter errors = new StringWriter();
-                e.printStackTrace(new PrintWriter(errors));
-                GriefPrevention.AddLogEntry(errors.toString(), CustomLogEntryTypes.Exception);
-            }
-
-            try
-            {
-                if (inStream != null) inStream.close();
-            }
-            catch (IOException exception) {}
-        }
-
         //load next claim number from file
         File nextClaimIdFile = new File(nextClaimIdFilePath);
         if (nextClaimIdFile.exists())
@@ -146,9 +110,9 @@ public class FlatFileDataStore extends DataStore
 
         //if converting up from schema version 0, rename player data files using UUIDs instead of player names
         //get a list of all the files in the claims data folder
+        File[] files = playerDataFolder.listFiles();
         if (this.getSchemaVersion() == 0)
         {
-            files = playerDataFolder.listFiles();
             ArrayList<String> namesToConvert = new ArrayList<>();
             for (File playerFile : files)
             {
@@ -763,41 +727,6 @@ public class FlatFileDataStore extends DataStore
         catch (IOException exception) {}
     }
 
-    //grants a group (players with a specific permission) bonus claim blocks as long as they're still members of the group
-    @Override
-    synchronized void saveGroupBonusBlocks(String groupName, int currentValue)
-    {
-        //write changes to file to ensure they don't get lost
-        BufferedWriter outStream = null;
-        try
-        {
-            //open the group's file
-            File groupDataFile = new File(playerDataFolderPath + File.separator + "$" + groupName);
-            groupDataFile.createNewFile();
-            outStream = new BufferedWriter(new FileWriter(groupDataFile));
-
-            //first line is number of bonus blocks
-            outStream.write(String.valueOf(currentValue));
-            outStream.newLine();
-        }
-
-        //if any problem, log it
-        catch (Exception e)
-        {
-            GriefPrevention.AddLogEntry("Unexpected exception saving data for group \"" + groupName + "\": " + e.getMessage());
-        }
-
-        try
-        {
-            //close the file
-            if (outStream != null)
-            {
-                outStream.close();
-            }
-        }
-        catch (IOException exception) {}
-    }
-
     synchronized void migrateData(DatabaseDataStore databaseStore)
     {
         //migrate claims
@@ -810,12 +739,6 @@ public class FlatFileDataStore extends DataStore
             }
         }
 
-        //migrate groups
-        for (Map.Entry<String, Integer> groupEntry : this.permissionToBonusBlocksMap.entrySet())
-        {
-            databaseStore.saveGroupBonusBlocks(groupEntry.getKey(), groupEntry.getValue());
-        }
-
         //migrate players
         File playerDataFolder = new File(playerDataFolderPath);
         File[] files = playerDataFolder.listFiles();
@@ -824,7 +747,7 @@ public class FlatFileDataStore extends DataStore
             if (!file.isFile()) continue;  //avoids folders
             if (file.isHidden()) continue; //avoid hidden files, which are likely not created by GriefPrevention
 
-            //all group data files start with a dollar sign.  ignoring those, already handled above
+            //group data files are obsolete.  ignoring those
             if (file.getName().startsWith("$")) continue;
 
             //ignore special files
