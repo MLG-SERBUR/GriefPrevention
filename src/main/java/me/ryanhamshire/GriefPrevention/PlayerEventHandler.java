@@ -303,14 +303,7 @@ class PlayerEventHandler implements Listener
 
         if (this.howToClaimPattern.matcher(message).matches())
         {
-            if (instance.creativeRulesApply(player.getLocation()))
-            {
-                GriefPrevention.sendMessage(player, TextMode.Info, Messages.CreativeBasicsVideo2, 10L, DataStore.CREATIVE_VIDEO_URL);
-            }
-            else
-            {
-                GriefPrevention.sendMessage(player, TextMode.Info, Messages.SurvivalBasicsVideo2, 10L, DataStore.SURVIVAL_VIDEO_URL);
-            }
+            GriefPrevention.sendMessage(player, TextMode.Info, Messages.SurvivalBasicsVideo2, 10L, DataStore.SURVIVAL_VIDEO_URL);
         }
 
         //FEATURE: automatically educate players about the /trapped command
@@ -643,8 +636,8 @@ class PlayerEventHandler implements Listener
             //may need pvp protection
             instance.checkPvpProtectionNeeded(player);
 
-            //if in survival claims mode, send a message about the claim basics video (except for admins - assumed experts)
-            if (instance.config_claims_worldModes.get(player.getWorld()) == ClaimsMode.Survival && !player.hasPermission("griefprevention.adminclaims") && this.dataStore.claims.size() > 10)
+            //send a message about the claim basics video (except for admins - assumed experts)
+            if (!player.hasPermission("griefprevention.adminclaims") && this.dataStore.claims.size() > 10)
             {
                 WelcomeTask task = new WelcomeTask(player);
                 Bukkit.getScheduler().scheduleSyncDelayedTask(instance, task, instance.config_claims_manualDeliveryDelaySeconds * 20L);
@@ -969,13 +962,6 @@ class PlayerEventHandler implements Listener
     {
         Player player = event.getPlayer();
 
-        //in creative worlds, dropping items is blocked
-        if (instance.creativeRulesApply(player.getLocation()))
-        {
-            event.setCancelled(true);
-            return;
-        }
-
         PlayerData playerData = this.dataStore.getPlayerData(player.getUniqueId());
 
         //FEATURE: players under siege or in PvP combat, can't throw items on the ground to hide
@@ -1001,9 +987,6 @@ class PlayerEventHandler implements Listener
         {
             //FEATURE: when players get trapped in a nether portal, send them back through to the other side
             instance.startRescueTask(player, player.getLocation());
-
-            //don't track in worlds where claims are not enabled
-            if (!instance.claimsEnabledForWorld(event.getTo().getWorld())) return;
         }
     }
 
@@ -1071,8 +1054,6 @@ class PlayerEventHandler implements Listener
     {
         Player player = event.getPlayer();
         Entity entity = event.getRightClicked();
-
-        if (!instance.claimsEnabledForWorld(entity.getWorld())) return;
 
         //allow horse protection to be overridden to allow management from other plugins
         if (!instance.config_claims_protectHorses && entity instanceof AbstractHorse) return;
@@ -1210,9 +1191,6 @@ class PlayerEventHandler implements Listener
         // Name tags may only be used on entities that the player is allowed to kill.
         if (itemInHand.getType() == Material.NAME_TAG)
         {
-            //don't track in worlds where claims are not enabled
-            if (!instance.claimsEnabledForWorld(entity.getWorld())) return;
-
             Claim cachedClaim = playerData.lastClaim;
             Claim claim = this.dataStore.getClaimAt(entity.getLocation(), false, cachedClaim);
 
@@ -1311,11 +1289,8 @@ class PlayerEventHandler implements Listener
         if (newItemStack != null && newItemStack.getType() == instance.config_claims_modificationTool)
         {
             //give the player his available claim blocks count and claiming instructions, but only if he keeps the shovel equipped for a minimum time, to avoid mouse wheel spam
-            if (instance.claimsEnabledForWorld(player.getWorld()))
-            {
-                EquipShovelProcessingTask task = new EquipShovelProcessingTask(player);
-                instance.getServer().getScheduler().scheduleSyncDelayedTask(instance, task, 15L);  //15L is approx. 3/4 of a second
-            }
+            EquipShovelProcessingTask task = new EquipShovelProcessingTask(player);
+            instance.getServer().getScheduler().scheduleSyncDelayedTask(instance, task, 15L);  //15L is approx. 3/4 of a second
         }
     }
 
@@ -1326,8 +1301,6 @@ class PlayerEventHandler implements Listener
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
     public void onPlayerBucketEmpty(PlayerBucketEmptyEvent bucketEvent)
     {
-        if (!instance.claimsEnabledForWorld(bucketEvent.getBlockClicked().getWorld())) return;
-
         Player player = bucketEvent.getPlayer();
         Block block = bucketEvent.getBlockClicked().getRelative(bucketEvent.getBlockFace());
         int minLavaDistance = 10;
@@ -1356,20 +1329,6 @@ class PlayerEventHandler implements Listener
         if (claim != null)
         {
             minLavaDistance = 3;
-        }
-
-        //otherwise no wilderness dumping in creative mode worlds
-        else if (instance.creativeRulesApply(block.getLocation()))
-        {
-            if (block.getY() >= instance.getSeaLevel(block.getWorld()) - 5 && !player.hasPermission("griefprevention.lava"))
-            {
-                if (bucketEvent.getBucket() == Material.LAVA_BUCKET)
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.NoWildernessBuckets);
-                    bucketEvent.setCancelled(true);
-                    return;
-                }
-            }
         }
 
         //lava buckets can't be dumped near other players unless pvp is on
@@ -1438,8 +1397,6 @@ class PlayerEventHandler implements Listener
     {
         Player player = bucketEvent.getPlayer();
         Block block = bucketEvent.getBlockClicked();
-
-        if (!instance.claimsEnabledForWorld(block.getWorld())) return;
 
         //exemption for cow milking (permissions will be handled by player interact with entity event instead)
         Material blockType = block.getType();
@@ -1741,14 +1698,13 @@ class PlayerEventHandler implements Listener
                 return;
             }
 
-            //survival world minecart placement requires container trust, which is the permission required to remove the minecart later
+            //minecart placement requires container trust, which is the permission required to remove the minecart later
             else if (clickedBlock != null &&
                     (materialInHand == Material.MINECART ||
                             materialInHand == Material.FURNACE_MINECART ||
                             materialInHand == Material.CHEST_MINECART ||
                             materialInHand == Material.TNT_MINECART ||
-                            materialInHand == Material.HOPPER_MINECART) &&
-                    !instance.creativeRulesApply(clickedBlock.getLocation()))
+                            materialInHand == Material.HOPPER_MINECART))
             {
                 if (playerData == null) playerData = this.dataStore.getPlayerData(player.getUniqueId());
                 Claim claim = this.dataStore.getClaimAt(clickedBlock.getLocation(), false, playerData.lastClaim);
@@ -1768,9 +1724,6 @@ class PlayerEventHandler implements Listener
             //if he's investigating a claim
             else if (materialInHand == instance.config_claims_investigationTool && hand == EquipmentSlot.HAND)
             {
-                //if claims are disabled in this world, do nothing
-                if (!instance.claimsEnabledForWorld(player.getWorld())) return;
-
                 // If investigation tool is on cooldown, do nothing.
                 if (player.getCooldown(instance.config_claims_investigationTool) > 0) return;
                 // Set investigation tool on cooldown to prevent spamming.
@@ -2060,13 +2013,6 @@ class PlayerEventHandler implements Listener
             Location lastShovelLocation = playerData.lastShovelLocation;
             if (lastShovelLocation == null)
             {
-                //if claims are not enabled in this world and it's not an administrative claim, display an error message and stop
-                if (!instance.claimsEnabledForWorld(player.getWorld()))
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Err, Messages.ClaimsDisabledWorld);
-                    return;
-                }
-
                 //if he's at the claim count per player limit already and doesn't have permission to bypass, display an error message
                 if (instance.config_claims_maxClaimsPerPlayer > 0 &&
                         !player.hasPermission("griefprevention.overrideclaimcountlimit") &&

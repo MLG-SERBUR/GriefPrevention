@@ -60,15 +60,8 @@ class EquipShovelProcessingTask implements Runnable
         int remainingBlocks = playerData.getRemainingClaimBlocks();
         GriefPrevention.sendMessage(player, TextMode.Instr, Messages.RemainingBlocks, String.valueOf(remainingBlocks));
 
-        //link to a video demo of land claiming, based on world type
-        if (GriefPrevention.instance.creativeRulesApply(player.getLocation()))
-        {
-            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.CreativeBasicsVideo2, DataStore.CREATIVE_VIDEO_URL);
-        }
-        else if (GriefPrevention.instance.claimsEnabledForWorld(player.getWorld()))
-        {
-            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
-        }
+        //link to a video demo of land claiming
+        GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
 
         //if standing in a claim owned by the player, visualize it
         Claim claim = GriefPrevention.instance.dataStore.getClaimAt(player.getLocation(), true, playerData.lastClaim);

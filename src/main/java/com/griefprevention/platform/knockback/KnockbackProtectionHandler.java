@@ -145,8 +145,6 @@ public abstract class KnockbackProtectionHandler implements Listener
             @NotNull Player attacker,
             @NotNull Entity entity)
     {
-        if (!instance.claimsEnabledForWorld(entity.getWorld())) return;
-
         // Determine protection type and required permission.
         ClaimPermission requiredPermission;
         if (entity instanceof ArmorStand || entity instanceof Hanging)

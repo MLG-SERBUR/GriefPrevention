@@ -106,7 +106,6 @@ public abstract class DataStore
 
     //video links
     public static final String SURVIVAL_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpuser" + ChatColor.RESET;
-    public static final String CREATIVE_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpcrea" + ChatColor.RESET;
     public static final String SUBDIVISION_VIDEO_URL = "" + ChatColor.DARK_AQUA + ChatColor.UNDERLINE + "bit.ly/mcgpsub" + ChatColor.RESET;
 
     //list of UUIDs which are soft-muted
@@ -920,12 +919,6 @@ public abstract class DataStore
         if(!world.getWorldBorder().isInside(smallerBoundaryCorner) || !world.getWorldBorder().isInside(greaterBoundaryCorner)){
             result.succeeded = false;
             return result;
-        }
-
-        //creative mode claims always go to bedrock
-        if (GriefPrevention.instance.config_claims_worldModes.get(world) == ClaimsMode.Creative)
-        {
-            smally = world.getMinHeight();
         }
 
         //create a new claim instance (but don't save it, yet)
