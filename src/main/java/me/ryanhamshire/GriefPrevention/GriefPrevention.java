@@ -720,9 +720,6 @@ public class GriefPrevention extends JavaPlugin
         }
     }
 
-        }
-    }
-
     private void setUpCommands()
     {
         new ClaimCommand(this);
@@ -2563,8 +2560,6 @@ public class GriefPrevention extends JavaPlugin
     @Deprecated(forRemoval = true, since = "17.0.0")
     public @Nullable String allowBuild(Player player, Location location, Material material)
     {
-        if (!GriefPrevention.instance.claimsEnabledForWorld(location.getWorld())) return null;
-
         ItemStack placed;
         if (material.isItem())
         {
