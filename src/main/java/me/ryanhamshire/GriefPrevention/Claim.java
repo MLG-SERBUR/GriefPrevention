@@ -77,17 +77,6 @@ public class Claim
 
     public boolean areExplosivesAllowed = false;
 
-    //parent claim
-    //only used for claim subdivisions.  top level claims have null here
-    public Claim parent = null;
-
-    // intended for subclaims - they inherit no permissions
-    private boolean inheritNothing = false;
-
-    //children (subdivisions)
-    //note subdivisions themselves never have children
-    public ArrayList<Claim> children = new ArrayList<>();
-
     //following a siege, buttons/levers are unlocked temporarily.  this represents that state
     public boolean doorsOpen = false;
 
@@ -112,7 +101,7 @@ public class Claim
     }
 
     //main constructor.  note that only creating a claim instance does nothing - a claim must be added to the data store to be effective
-    Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, boolean inheritNothing, Long id)
+    Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, Long id)
     {
         //modification date
         this.modifiedDate = Calendar.getInstance().getTime();
@@ -164,13 +153,6 @@ public class Claim
         {
             this.setPermission(managerID, ClaimPermission.Manage);
         }
-
-        this.inheritNothing = inheritNothing;
-    }
-
-    Claim(Location lesserBoundaryCorner, Location greaterBoundaryCorner, UUID ownerID, List<String> builderIDs, List<String> containerIDs, List<String> accessorIDs, List<String> managerIDs, Long id)
-    {
-        this(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builderIDs, containerIDs, accessorIDs, managerIDs, false, id);
     }
 
     //produces a copy of a claim.
@@ -183,9 +165,6 @@ public class Claim
         this.playerIDToClaimPermissionMap = new HashMap<>(claim.playerIDToClaimPermissionMap);
         this.inDataStore = false; //since it's a copy of a claim, not in datastore!
         this.areExplosivesAllowed = claim.areExplosivesAllowed;
-        this.parent = claim.parent;
-        this.inheritNothing = claim.inheritNothing;
-        this.children = new ArrayList<>(claim.children);
         this.doorsOpen = claim.doorsOpen;
     }
 
@@ -215,16 +194,6 @@ public class Claim
         return this.greaterBoundaryCorner.getBlockZ() - this.lesserBoundaryCorner.getBlockZ() + 1;
     }
 
-    public boolean getSubclaimRestrictions()
-    {
-        return inheritNothing;
-    }
-
-    public void setSubclaimRestrictions(boolean inheritNothing)
-    {
-        this.inheritNothing = inheritNothing;
-    }
-
     //distance check for claims, distance in this case is a band around the outside of the claim rather then euclidean distance
     public boolean isNear(Location location, int howNear)
     {
@@ -233,7 +202,7 @@ public class Claim
                         new Location(this.greaterBoundaryCorner.getWorld(), this.greaterBoundaryCorner.getBlockX() + howNear, this.greaterBoundaryCorner.getBlockY(), this.greaterBoundaryCorner.getBlockZ() + howNear),
                         null, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), null);
 
-        return claim.contains(location, false, true);
+        return claim.contains(location, false);
     }
 
     /**
@@ -479,13 +448,6 @@ public class Claim
                 return null;
         }
 
-        // Permission inheritance for subdivisions.
-        if (this.parent != null)
-        {
-            if (!inheritNothing)
-                return this.parent.getDefaultDenial(player, uuid, permission, event);
-        }
-
         // Catch-all error message for all other cases.
         return () ->
         {
@@ -588,22 +550,12 @@ public class Claim
     {
         playerID = playerID.toLowerCase();
         this.playerIDToClaimPermissionMap.remove(playerID);
-
-        for (Claim child : this.children)
-        {
-            child.dropPermission(playerID);
-        }
     }
 
     //clears all permissions (except owner of course)
     public void clearPermissions()
     {
         this.playerIDToClaimPermissionMap.clear();
-
-        for (Claim child : this.children)
-        {
-            child.clearPermissions();
-        }
     }
 
     //gets ALL permissions
@@ -649,9 +601,6 @@ public class Claim
     //returns a friendly owner name (for admin claims, returns "an administrator" as the owner)
     public String getOwnerName()
     {
-        if (this.parent != null)
-            return this.parent.getOwnerName();
-
         if (this.ownerID == null)
             return GriefPrevention.instance.dataStore.getMessage(Messages.OwnerNameForAdminClaims);
 
@@ -660,17 +609,12 @@ public class Claim
 
     public UUID getOwnerID()
     {
-        if (this.parent != null)
-        {
-            return this.parent.ownerID;
-        }
         return this.ownerID;
     }
 
     //whether or not a location is in a claim
     //ignoreHeight = true means location UNDER the claim will return TRUE
-    //excludeSubdivisions = true means that locations inside subdivisions of the claim will return FALSE
-    public boolean contains(Location location, boolean ignoreHeight, boolean excludeSubdivisions)
+    public boolean contains(Location location, boolean ignoreHeight)
     {
         //not in the same world implies false
         if (!Objects.equals(location.getWorld(), this.lesserBoundaryCorner.getWorld())) return false;
@@ -688,29 +632,6 @@ public class Claim
         else if (!ignoreHeight && !boundingBox.contains(x, location.getBlockY(), z))
         {
             return false;
-        }
-
-        //additional check for subdivisions
-        //you're only in a subdivision when you're also in its parent claim
-        //NOTE: if a player creates subdivions then resizes the parent claim, it's possible that
-        //a subdivision can reach outside of its parent's boundaries.  so this check is important!
-        if (this.parent != null)
-        {
-            return this.parent.contains(location, ignoreHeight, false);
-        }
-
-        //code to exclude subdivisions in this check
-        else if (excludeSubdivisions)
-        {
-            //search all subdivisions to see if the location is in any of them
-            for (Claim child : this.children)
-            {
-                //if we find such a subdivision, return false
-                if (child.contains(location, ignoreHeight, true))
-                {
-                    return false;
-                }
-            }
         }
 
         //otherwise yes
