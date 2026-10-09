@@ -108,10 +108,6 @@ public class GriefPrevention extends JavaPlugin
     PlayerEventHandler playerEventHandler;
     //configuration variables, loaded/saved from a config.yml
 
-    //claim mode for each world
-    public ConcurrentHashMap<World, ClaimsMode> config_claims_worldModes;
-    private boolean config_creativeWorldsExist;                     //note on whether there are any creative mode worlds, to save cpu cycles on a common hash lookup
-
     public boolean config_claims_preventGlobalMonsterEggs; //whether monster eggs can be placed regardless of trust.
     public boolean config_claims_preventTheft;                        //whether containers and crafting blocks are protectable
     public boolean config_claims_protectCreatures;                    //whether claimed animals may be injured by players without permission
@@ -414,110 +410,12 @@ public class GriefPrevention extends JavaPlugin
         //read configuration settings (note defaults)
         int configVersion = config.getInt("GriefPrevention.ConfigVersion", 0);
 
-        //get (deprecated node) claims world names from the config file
         List<World> worlds = this.getServer().getWorlds();
-        List<String> deprecated_claimsEnabledWorldNames = config.getStringList("GriefPrevention.Claims.Worlds");
-
-        //validate that list
-        for (int i = 0; i < deprecated_claimsEnabledWorldNames.size(); i++)
-        {
-            String worldName = deprecated_claimsEnabledWorldNames.get(i);
-            World world = this.getServer().getWorld(worldName);
-            if (world == null)
-            {
-                deprecated_claimsEnabledWorldNames.remove(i--);
-            }
-        }
-
-        //get (deprecated node) creative world names from the config file
-        List<String> deprecated_creativeClaimsEnabledWorldNames = config.getStringList("GriefPrevention.Claims.CreativeRulesWorlds");
-
-        //validate that list
-        for (int i = 0; i < deprecated_creativeClaimsEnabledWorldNames.size(); i++)
-        {
-            String worldName = deprecated_creativeClaimsEnabledWorldNames.get(i);
-            World world = this.getServer().getWorld(worldName);
-            if (world == null)
-            {
-                deprecated_claimsEnabledWorldNames.remove(i--);
-            }
-        }
 
         //get (deprecated) pvp fire placement proximity note and use it if it exists (in the new config format it will be overwritten later).
         config_pvp_allowFireNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowFlintAndSteelNearOtherPlayers", false);
         //get (deprecated) pvp lava dump proximity note and use it if it exists (in the new config format it will be overwritten later).
         config_pvp_allowLavaNearPlayers = config.getBoolean("GriefPrevention.PvP.AllowLavaDumpingNearOtherPlayers", false);
-
-        //decide claim mode for each world
-        this.config_claims_worldModes = new ConcurrentHashMap<>();
-        this.config_creativeWorldsExist = false;
-        for (World world : worlds)
-        {
-            //is it specified in the config file?
-            String configSetting = config.getString("GriefPrevention.Claims.Mode." + world.getName());
-            if (configSetting != null)
-            {
-                ClaimsMode claimsMode = this.configStringToClaimsMode(configSetting);
-                if (claimsMode != null)
-                {
-                    this.config_claims_worldModes.put(world, claimsMode);
-                    if (claimsMode == ClaimsMode.Creative) this.config_creativeWorldsExist = true;
-                    continue;
-                }
-                else
-                {
-                    GriefPrevention.AddLogEntry("Error: Invalid claim mode \"" + configSetting + "\".  Options are Survival, Creative, and Disabled.");
-                    this.config_claims_worldModes.put(world, ClaimsMode.Creative);
-                    this.config_creativeWorldsExist = true;
-                }
-            }
-
-            //was it specified in a deprecated config node?
-            if (deprecated_creativeClaimsEnabledWorldNames.contains(world.getName()))
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Creative);
-                this.config_creativeWorldsExist = true;
-            }
-            else if (deprecated_claimsEnabledWorldNames.contains(world.getName()))
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Survival);
-            }
-
-            //does the world's name indicate its purpose?
-            else if (world.getName().toLowerCase().contains("survival"))
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Survival);
-            }
-            else if (world.getName().toLowerCase().contains("creative"))
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Creative);
-                this.config_creativeWorldsExist = true;
-            }
-
-            //decide a default based on server type and world type
-            else if (this.getServer().getDefaultGameMode() == GameMode.CREATIVE)
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Creative);
-                this.config_creativeWorldsExist = true;
-            }
-            else if (world.getEnvironment() == Environment.NORMAL)
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Survival);
-            }
-            else
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Disabled);
-            }
-
-            //if the setting WOULD be disabled but this is a server upgrading from the old config format,
-            //then default to survival mode for safety's sake (to protect any admin claims which may 
-            //have been created there)
-            if (this.config_claims_worldModes.get(world) == ClaimsMode.Disabled &&
-                    !deprecated_claimsEnabledWorldNames.isEmpty())
-            {
-                this.config_claims_worldModes.put(world, ClaimsMode.Survival);
-            }
-        }
 
         //pvp worlds list
         this.config_pvp_specifiedWorlds = new HashMap<>();
@@ -568,9 +466,6 @@ public class GriefPrevention extends JavaPlugin
         {
             for (World world : worlds)
             {
-                // Only check worlds where claims are enabled
-                if (!this.claimsEnabledForWorld(world)) continue;
-
                 int minY = this.config_claims_minY;
                 int seaLevel = this.getSeaLevel(world);
                 if (minY > seaLevel)
@@ -726,15 +621,6 @@ public class GriefPrevention extends JavaPlugin
         this.config_logs_adminEnabled = config.getBoolean("GriefPrevention.Abridged Logs.Included Entry Types.Administrative Activity", false);
         this.config_logs_debugEnabled = config.getBoolean("GriefPrevention.Abridged Logs.Included Entry Types.Debug", false);
         this.config_logs_mutedChatEnabled = config.getBoolean("GriefPrevention.Abridged Logs.Included Entry Types.Muted Chat Messages", false);
-
-        //claims mode by world
-        for (World world : this.config_claims_worldModes.keySet())
-        {
-            outConfig.set(
-                    "GriefPrevention.Claims.Mode." + world.getName(),
-                    this.config_claims_worldModes.get(world).name());
-        }
-
 
         outConfig.set("GriefPrevention.Claims.PreventGlobalMonsterEggs", this.config_claims_preventGlobalMonsterEggs);
         outConfig.set("GriefPrevention.Claims.PreventTheft", this.config_claims_preventTheft);
@@ -952,30 +838,6 @@ public class GriefPrevention extends JavaPlugin
         }
     }
 
-    private ClaimsMode configStringToClaimsMode(String configSetting)
-    {
-        if (configSetting.equalsIgnoreCase("Survival"))
-        {
-            return ClaimsMode.Survival;
-        }
-        else if (configSetting.equalsIgnoreCase("Creative"))
-        {
-            return ClaimsMode.Creative;
-        }
-        else if (configSetting.equalsIgnoreCase("Disabled"))
-        {
-            return ClaimsMode.Disabled;
-        }
-        else if (configSetting.equalsIgnoreCase("SurvivalRequiringClaims"))
-        {
-            return ClaimsMode.SurvivalRequiringClaims;
-        }
-        else
-        {
-            return null;
-        }
-    }
-
     private void setUpCommands()
     {
         new ClaimCommand(this);
@@ -996,15 +858,8 @@ public class GriefPrevention extends JavaPlugin
         {
             if (args.length < 1)
             {
-                //link to a video demo of land claiming, based on world type
-                if (GriefPrevention.instance.creativeRulesApply(player.getLocation()))
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Instr, Messages.CreativeBasicsVideo2, DataStore.CREATIVE_VIDEO_URL);
-                }
-                else if (GriefPrevention.instance.claimsEnabledForWorld(player.getLocation().getWorld()))
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
-                }
+                //link to a video demo of land claiming
+                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
                 return false;
             }
 
@@ -1015,15 +870,8 @@ public class GriefPrevention extends JavaPlugin
             }
             catch (NumberFormatException e)
             {
-                //link to a video demo of land claiming, based on world type
-                if (GriefPrevention.instance.creativeRulesApply(player.getLocation()))
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Instr, Messages.CreativeBasicsVideo2, DataStore.CREATIVE_VIDEO_URL);
-                }
-                else if (GriefPrevention.instance.claimsEnabledForWorld(player.getLocation().getWorld()))
-                {
-                    GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
-                }
+                //link to a video demo of land claiming
+                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
                 return false;
             }
 
@@ -2861,21 +2709,6 @@ public class GriefPrevention extends JavaPlugin
         {
             task.run();
         }
-    }
-
-    //checks whether players can create claims in a world
-    public boolean claimsEnabledForWorld(World world)
-    {
-        ClaimsMode mode = this.config_claims_worldModes.get(world);
-        return mode != null && mode != ClaimsMode.Disabled;
-    }
-
-    //determines whether creative anti-grief rules apply at a location
-    public boolean creativeRulesApply(@NotNull Location location)
-    {
-        if (!this.config_creativeWorldsExist) return false;
-
-        return this.config_claims_worldModes.get(location.getWorld()) == ClaimsMode.Creative;
     }
 
     /**
