@@ -208,9 +208,6 @@ public class BlockEventHandler implements Listener
     {
         Player player = placeEvent.getPlayer();
 
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(placeEvent.getBlock().getWorld())) return;
-
         //make sure the player is allowed to build at the location
         for (BlockState block : placeEvent.getReplacedBlockStates())
         {
@@ -267,9 +264,6 @@ public class BlockEventHandler implements Listener
                 }
             }
         }
-
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(placeEvent.getBlock().getWorld())) return;
 
         //make sure the player is allowed to build at the location
         Supplier<String> noBuildReason = ProtectionHelper.checkPermission(player, block.getLocation(), ClaimPermission.Build, placeEvent);
@@ -420,7 +414,7 @@ public class BlockEventHandler implements Listener
         }
 
         //FEATURE: limit wilderness tree planting to grass, or dirt with more blocks beneath it
-        else if (Tag.SAPLINGS.isTagged(block.getType()) && GriefPrevention.instance.config_blockSkyTrees && GriefPrevention.instance.claimsEnabledForWorld(player.getWorld()))
+        else if (Tag.SAPLINGS.isTagged(block.getType()) && GriefPrevention.instance.config_blockSkyTrees)
         {
             Block earthBlock = placeEvent.getBlockAgainst();
             if (earthBlock.getType() != Material.SHORT_GRASS)
@@ -434,7 +428,7 @@ public class BlockEventHandler implements Listener
         }
 
         //FEATURE: warn players when they're placing non-trash blocks outside of their claimed areas
-        else if (!this.TRASH_BLOCKS.contains(block.getType()) && GriefPrevention.instance.claimsEnabledForWorld(block.getWorld()))
+        else if (!this.TRASH_BLOCKS.contains(block.getType()))
         {
             if (!playerData.warnedAboutBuildingOutsideClaims && !player.hasPermission("griefprevention.adminclaims")
                     && player.hasPermission("griefprevention.createclaims") && ((playerData.lastClaim == null
@@ -550,9 +544,6 @@ public class BlockEventHandler implements Listener
         PistonMode pistonMode = GriefPrevention.instance.config_pistonMovement;
         // Return if piston movements are ignored.
         if (pistonMode == PistonMode.IGNORED) return;
-
-        // Don't check in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(event.getBlock().getWorld())) return;
 
         BlockFace direction = event.getDirection();
         Block pistonBlock = event.getBlock();
@@ -754,9 +745,6 @@ public class BlockEventHandler implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockIgnite(BlockIgniteEvent igniteEvent)
     {
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(igniteEvent.getBlock().getWorld())) return;
-
         if (igniteEvent.getCause() == IgniteCause.LIGHTNING && GriefPrevention.instance.dataStore.getClaimAt(igniteEvent.getIgnitingEntity().getLocation(), false, null) != null)
         {
             igniteEvent.setCancelled(true); //BlockIgniteEvent is called before LightningStrikeEvent. See #532. However, see #1125 for further discussion on detecting trident-caused lightning.
@@ -820,9 +808,6 @@ public class BlockEventHandler implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     private void onBlockFertilize(@NotNull BlockFertilizeEvent event)
     {
-        // Don't track in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(event.getBlock().getWorld())) return;
-
         // Trees are handled by the StructureGrowEvent handler.
         if (Tag.SAPLINGS.isTagged(event.getBlock().getType())) return;
 
@@ -885,9 +870,6 @@ public class BlockEventHandler implements Listener
         // Only take these potentially expensive steps if configured to do so.
         if (!GriefPrevention.instance.config_limitTreeGrowth) return;
 
-        // Don't track in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(event.getWorld())) return;
-
         Block source = event.getLocation().getBlock();
         onMultiBlockGrow(
                 event.getPlayer(),
@@ -903,9 +885,6 @@ public class BlockEventHandler implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockSpread(@NotNull BlockSpreadEvent spreadEvent)
     {
-        // Don't track in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(spreadEvent.getBlock().getWorld())) return;
-
         Material newType = spreadEvent.getNewState().getType();
         // Ignore grass growth. Grass is inoffensive and causes the majority of normal spread events.
         if (newType == Material.GRASS_BLOCK) return;
@@ -972,9 +951,6 @@ public class BlockEventHandler implements Listener
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockBurn(@NotNull BlockBurnEvent burnEvent)
     {
-        // Don't track in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(burnEvent.getBlock().getWorld())) return;
-
         // Obey global fire rules.
         if (!GriefPrevention.instance.config_fireDestroys)
         {
@@ -1030,13 +1006,9 @@ public class BlockEventHandler implements Listener
         //always allow fluids to flow straight down
         if (spreadEvent.getFace() == BlockFace.DOWN) return;
 
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(spreadEvent.getBlock().getWorld())) return;
-
         //where from and where to?
         Location fromLocation = spreadEvent.getBlock().getLocation();
         Location toLocation = spreadEvent.getToBlock().getLocation();
-        boolean isInCreativeRulesWorld = GriefPrevention.instance.creativeRulesApply(toLocation);
         Claim fromClaim = this.dataStore.getClaimAt(fromLocation, false, lastSpreadFromClaim);
         Claim toClaim = this.dataStore.getClaimAt(toLocation, false, lastSpreadToClaim);
 
@@ -1046,7 +1018,7 @@ public class BlockEventHandler implements Listener
         this.lastSpreadFromClaim = fromClaim;
         this.lastSpreadToClaim = toClaim;
 
-        if (!isFluidFlowAllowed(fromClaim, toClaim, isInCreativeRulesWorld))
+        if (!isFluidFlowAllowed(fromClaim, toClaim))
         {
             spreadEvent.setCancelled(true);
         }
@@ -1057,15 +1029,10 @@ public class BlockEventHandler implements Listener
      *
      * @param from The claim at the source location of the fluid flow, or null if it's wilderness.
      * @param to The claim at the destination location of the fluid flow, or null if it's wilderness.
-     * @param creativeRulesApply Whether creative rules apply to the world where claims are located.
      * @return `true` if fluid flow is allowed, `false` otherwise.
      */
-    private boolean isFluidFlowAllowed(Claim from, Claim to, boolean creativeRulesApply)
+    private boolean isFluidFlowAllowed(Claim from, Claim to)
     {
-        // Special case: if in a world with creative rules,
-        // don't allow fluids to flow into wilderness.
-        if (creativeRulesApply && to == null) return false;
-
         // The fluid flow should be allowed or denied based on the specific combination
         // of source and destination claim types. The following matrix outlines these
         // combinations and indicates whether fluid flow should be permitted:
@@ -1113,33 +1080,10 @@ public class BlockEventHandler implements Listener
         return sameOwner;
     }
 
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
-    public void onForm(BlockFormEvent event)
-    {
-        Block block = event.getBlock();
-        Location location = block.getLocation();
-
-        if (GriefPrevention.instance.creativeRulesApply(location))
-        {
-            Material type = block.getType();
-            if (type == Material.COBBLESTONE || type == Material.OBSIDIAN || type == Material.LAVA || type == Material.WATER)
-            {
-                Claim claim = GriefPrevention.instance.dataStore.getClaimAt(location, false, null);
-                if (claim == null)
-                {
-                    event.setCancelled(true);
-                }
-            }
-        }
-    }
-
     //Stop projectiles from destroying blocks that don't fire a proper event
     @EventHandler(ignoreCancelled = true)
     private void chorusFlower(ProjectileHitEvent event)
     {
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(event.getEntity().getWorld())) return;
-
         Block block = event.getHitBlock();
 
         // Ensure projectile affects block.
@@ -1176,9 +1120,6 @@ public class BlockEventHandler implements Listener
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
     public void onDispense(BlockDispenseEvent dispenseEvent)
     {
-        //don't track in worlds where claims are not enabled
-        if (!GriefPrevention.instance.claimsEnabledForWorld(dispenseEvent.getBlock().getWorld())) return;
-
         //from where?
         Block fromBlock = dispenseEvent.getBlock();
         BlockData fromData = fromBlock.getBlockData();
@@ -1188,14 +1129,6 @@ public class BlockEventHandler implements Listener
         Block toBlock = fromBlock.getRelative(dispenser.getFacing());
         Claim fromClaim = this.dataStore.getClaimAt(fromBlock.getLocation(), false, null);
         Claim toClaim = this.dataStore.getClaimAt(toBlock.getLocation(), false, fromClaim);
-
-        //into wilderness is NOT OK in creative mode worlds
-        Material materialDispensed = dispenseEvent.getItem().getType();
-        if ((materialDispensed == Material.WATER_BUCKET || materialDispensed == Material.LAVA_BUCKET) && GriefPrevention.instance.creativeRulesApply(dispenseEvent.getBlock().getLocation()) && toClaim == null)
-        {
-            dispenseEvent.setCancelled(true);
-            return;
-        }
 
         //wilderness to wilderness is OK
         if (fromClaim == null && toClaim == null) return;
@@ -1262,9 +1195,6 @@ public class BlockEventHandler implements Listener
         {
             return;
         }
-
-        // Don't track in worlds where claims are not enabled.
-        if (!GriefPrevention.instance.claimsEnabledForWorld(event.getWorld())) return;
 
         // Ignore this event if preventNonPlayerCreatedPortals config option is disabled, and we don't know the entity.
         if (!(event.getEntity() instanceof Player) && !GriefPrevention.instance.config_claims_preventNonPlayerCreatedPortals)
