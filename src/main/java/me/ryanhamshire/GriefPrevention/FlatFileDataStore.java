@@ -99,7 +99,6 @@ public class FlatFileDataStore extends DataStore
 
     void loadClaimData(File[] files) throws Exception
     {
-        ConcurrentHashMap<Claim, Long> orphans = new ConcurrentHashMap<>();
         for (int i = 0; i < files.length; i++)
         {
             if (files[i].isFile())  //avoids folders
@@ -129,16 +128,8 @@ public class FlatFileDataStore extends DataStore
 
                 try
                 {
-                    ArrayList<Long> out_parentID = new ArrayList<>();  //hacky output parameter
-                    Claim claim = this.loadClaim(files[i], out_parentID, claimID);
-                    if (out_parentID.isEmpty() || out_parentID.get(0) == -1)
-                    {
-                        this.addClaim(claim, false);
-                    }
-                    else
-                    {
-                        orphans.put(claim, out_parentID.get(0));
-                    }
+                    Claim claim = this.loadClaim(files[i], claimID);
+                    this.addClaim(claim, false);
                 }
 
                 //if there's any problem with the file's content, log an error message and skip it
@@ -157,20 +148,9 @@ public class FlatFileDataStore extends DataStore
                 }
             }
         }
-
-        //link children to parents
-        for (Claim child : orphans.keySet())
-        {
-            Claim parent = this.getClaim(orphans.get(child));
-            if (parent != null)
-            {
-                child.parent = parent;
-                this.addClaim(child, false);
-            }
-        }
     }
 
-    Claim loadClaim(File file, ArrayList<Long> out_parentID, long claimID) throws IOException, InvalidConfigurationException, Exception
+    Claim loadClaim(File file, long claimID) throws IOException, InvalidConfigurationException, Exception
     {
         List<String> lines = Files.readLines(file, StandardCharsets.UTF_8);
         StringBuilder builder = new StringBuilder();
@@ -179,10 +159,10 @@ public class FlatFileDataStore extends DataStore
             builder.append(line).append('\n');
         }
 
-        return this.loadClaim(builder.toString(), out_parentID, file.lastModified(), claimID, Bukkit.getServer().getWorlds());
+        return this.loadClaim(builder.toString(), file.lastModified(), claimID, Bukkit.getServer().getWorlds());
     }
 
-    Claim loadClaim(String input, ArrayList<Long> out_parentID, long lastModifiedDate, long claimID, List<World> validWorlds) throws InvalidConfigurationException, Exception
+    Claim loadClaim(String input, long lastModifiedDate, long claimID, List<World> validWorlds) throws InvalidConfigurationException, Exception
     {
         Claim claim = null;
         YamlConfiguration yaml = new YamlConfiguration();
@@ -216,12 +196,8 @@ public class FlatFileDataStore extends DataStore
 
         List<String> managers = yaml.getStringList("Managers");
 
-        boolean inheritNothing = yaml.getBoolean("inheritNothing");
-
-        out_parentID.add(yaml.getLong("Parent Claim ID", -1L));
-
         //instantiate
-        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, inheritNothing, claimID);
+        claim = new Claim(lesserBoundaryCorner, greaterBoundaryCorner, ownerID, builders, containers, accessors, managers, claimID);
         claim.modifiedDate = new Date(lastModifiedDate);
         claim.id = claimID;
 
@@ -251,16 +227,6 @@ public class FlatFileDataStore extends DataStore
         yaml.set("Containers", containers);
         yaml.set("Accessors", accessors);
         yaml.set("Managers", managers);
-
-        Long parentID = -1L;
-        if (claim.parent != null)
-        {
-            parentID = claim.parent.id;
-        }
-
-        yaml.set("Parent Claim ID", parentID);
-
-        yaml.set("inheritNothing", claim.getSubclaimRestrictions());
 
         return yaml.saveToString();
     }

@@ -351,7 +351,7 @@ public class BlockEventHandler implements Listener
                 //radius == 0 means protect ONLY the chest
                 if (GriefPrevention.instance.config_claims_automaticClaimsForNewPlayersRadius == 0)
                 {
-                    this.dataStore.createClaim(block.getWorld(), block.getX(), block.getX(), block.getY(), block.getY(), block.getZ(), block.getZ(), player.getUniqueId(), null, null, player);
+                    this.dataStore.createClaim(block.getWorld(), block.getX(), block.getX(), block.getY(), block.getY(), block.getZ(), block.getZ(), player.getUniqueId(), null, player);
                     GriefPrevention.sendMessage(player, TextMode.Success, Messages.ChestClaimConfirmation);
                 }
 
@@ -379,7 +379,7 @@ public class BlockEventHandler implements Listener
                                     block.getY() - GriefPrevention.instance.config_claims_claimsExtendIntoGroundDistance, block.getY(),
                                     block.getZ() - radius, block.getZ() + radius,
                                     player.getUniqueId(),
-                                    null, null,
+                                    null,
                                     player);
 
                             if (result.succeeded) break;
@@ -556,8 +556,7 @@ public class BlockEventHandler implements Listener
 
         BlockFace direction = event.getDirection();
         Block pistonBlock = event.getBlock();
-        Claim pistonClaim = this.dataStore.getClaimAt(pistonBlock.getLocation(), false,
-                pistonMode != PistonMode.CLAIMS_ONLY, null);
+        Claim pistonClaim = this.dataStore.getClaimAt(pistonBlock.getLocation(), false, null);
 
         // A claim is required, but the piston is not inside a claim.
         if (pistonClaim == null && pistonMode == PistonMode.CLAIMS_ONLY)
@@ -573,8 +572,7 @@ public class BlockEventHandler implements Listener
             if (isRetract) return;
 
             Block invadedBlock = pistonBlock.getRelative(direction);
-            Claim invadedClaim = this.dataStore.getClaimAt(invadedBlock.getLocation(), false,
-                    pistonMode != PistonMode.CLAIMS_ONLY, pistonClaim);
+            Claim invadedClaim = this.dataStore.getClaimAt(invadedBlock.getLocation(), false, pistonClaim);
             if (invadedClaim != null && (pistonClaim == null || !Objects.equals(pistonClaim.getOwnerID(), invadedClaim.getOwnerID())))
             {
                 event.setCancelled(true);
@@ -868,7 +866,7 @@ public class BlockEventHandler implements Listener
         else
         {
             // If no player is present (dispenser, natural growth, etc.), use owner comparison.
-            sourceClaim = this.dataStore.getClaimAt(source.getLocation(), false, false, lastBlockFertilizeClaim);
+            sourceClaim = this.dataStore.getClaimAt(source.getLocation(), false, lastBlockFertilizeClaim);
             conflictCheck = denyOtherOwnerIntersection(sourceClaim);
         }
 
@@ -922,7 +920,7 @@ public class BlockEventHandler implements Listener
             return;
         }
 
-        Claim spreadTo = this.dataStore.getClaimAt(spreadEvent.getBlock().getLocation(), false, true, lastBlockSpreadClaim);
+        Claim spreadTo = this.dataStore.getClaimAt(spreadEvent.getBlock().getLocation(), false, lastBlockSpreadClaim);
 
         // Spreading in unclaimed area is allowed.
         if (spreadTo == null) {
@@ -932,7 +930,7 @@ public class BlockEventHandler implements Listener
         // Cache claim to reduce the strain of repeated attempts.
         lastBlockSpreadClaim = spreadTo;
 
-        Claim spreadFrom = this.dataStore.getClaimAt(spreadEvent.getSource().getLocation(), false, true, spreadTo);
+        Claim spreadFrom = this.dataStore.getClaimAt(spreadEvent.getSource().getLocation(), false, spreadTo);
 
         // Disallow spreading from other users' claims.
         if (spreadFrom == null || !Objects.equals(spreadTo.getOwnerID(), spreadFrom.getOwnerID()))
@@ -1066,33 +1064,23 @@ public class BlockEventHandler implements Listener
         // don't allow fluids to flow into wilderness.
         if (creativeRulesApply && to == null) return false;
 
-        // The fluid flow should be allowed or denied based on the specific combination
-        // of source and destination claim types. The following matrix outlines these
-        // combinations and indicates whether fluid flow should be permitted:
+        // Fluid flow is allowed within wilderness, within the same claim,
+        // from a claim to wilderness, or between claims owned by the same player.
+        // Otherwise it is denied.
         //
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | From \ To    | Wild | Claim A1 | Sub A1_1 | Sub A1_2 | Sub A1_3 (R) | Claim A2 | Claim B |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Wild         | Yes  | -        | -        | -        | -            | -        | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Claim A1     | Yes  | Yes      | Yes      | Yes      | -            | Yes      | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Sub A1_1     | Yes  | -        | Yes      | -        | -            | -        | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Sub A1_2     | Yes  | -        | -        | Yes      | -            | -        | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Sub A1_3 (R) | Yes  | -        | -        | -        | Yes          | -        | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Claim A2     | Yes  | Yes      | -        | -        | -            | Yes      | -       |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
-        //   | Claim B      | Yes  | -        | -        | -        | -            | -        | Yes     |
-        //   +--------------+------+----------+----------+----------+--------------+----------+---------+
+        //   +------------+------+---------+---------+
+        //   | From \ To  | Wild | Claim A | Claim B |
+        //   +------------+------+---------+---------+
+        //   | Wild       | Yes  | -       | -       |
+        //   +------------+------+---------+---------+
+        //   | Claim A    | Yes  | Yes     | -       |
+        //   +------------+------+---------+---------+
+        //   | Claim B    | Yes  | -       | Yes     |
+        //   +------------+------+---------+---------+
         //
         //   Legend:
         //     Wild = wilderness
-        //     Claim A* = claim owned by player A
-        //     Sub A*_* = subdivision of Claim A*
-        //     (R) = Restricted subdivision
+        //     Claim A = claim owned by player A
         //     Claim B = claim owned by player B
         //     Yes = fluid flow allowed
         //     - = fluid flow not allowed
@@ -1101,15 +1089,10 @@ public class BlockEventHandler implements Listener
         boolean toWilderness = to == null;
         boolean sameClaim = from != null && to != null && Objects.equals(from.getID(), to.getID());
         boolean sameOwner = from != null && to != null && Objects.equals(from.getOwnerID(), to.getOwnerID());
-        boolean isToSubdivision = to != null && to.parent != null;
-        boolean isToRestrictedSubdivision = isToSubdivision && to.getSubclaimRestrictions();
-        boolean isFromSubdivision = from != null && from.parent != null;
 
         if (toWilderness) return true;
         if (fromWilderness) return false;
         if (sameClaim) return true;
-        if (isFromSubdivision) return false;
-        if (isToSubdivision) return !isToRestrictedSubdivision;
         return sameOwner;
     }
 

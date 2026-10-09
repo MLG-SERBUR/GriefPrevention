@@ -32,7 +32,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.stream.Collectors;
 
 //represents a visualization sent to a player
 //FEATURE: to show players visually where claim boundaries are, we send them fake block change packets
@@ -89,17 +88,11 @@ public class Visualization
     @Deprecated(forRemoval = true, since = "16.18")
     public static Visualization FromClaim(Claim claim, int height, me.ryanhamshire.GriefPrevention.VisualizationType visualizationType, Location locality)
     {
-        if (claim.parent != null) claim = claim.parent;
-
         VisualizationType type = visualizationType.convert();
         if (type == VisualizationType.CLAIM && claim.isAdminClaim()) type = VisualizationType.ADMIN_CLAIM;
 
         Visualization visualization = new Visualization();
         visualization.boundaries.add(new Boundary(claim, type));
-        visualization.boundaries.addAll(
-                claim.children.stream()
-                        .map(child -> new Boundary(child, com.griefprevention.visualization.VisualizationType.SUBDIVISION))
-                        .collect(Collectors.toUnmodifiableSet()));
 
         return visualization;
     }
@@ -131,7 +124,7 @@ public class Visualization
 
     /**
      * adds a claim's visualization to the current visualization
-     * handy for combining several visualizations together, as when visualization a top level claim with several subdivisions inside
+     * handy for combining several visualizations together
      * locality is a performance consideration.  only create visualization blocks for around 100 blocks of the locality
      * @deprecated Add all desired elements to the list of boundaries ({@link BoundaryVisualizationEvent#getBoundaries()})
      */
@@ -143,7 +136,7 @@ public class Visualization
 
     /**
      * adds a claim's visualization to the current visualization
-     * handy for combining several visualizations together, as when visualization a top level claim with several subdivisions inside
+     * handy for combining several visualizations together
      * locality is a performance consideration.  only create visualization blocks for around 100 blocks of the locality
      * @deprecated Add all desired elements to the list of boundaries ({@link BoundaryVisualizationEvent#getBoundaries()})
      */
