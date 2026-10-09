@@ -92,9 +92,6 @@ public class EntityDamageHandler implements Listener
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onEntityTarget(@NotNull EntityTargetEvent event)
     {
-        if (!instance.claimsEnabledForWorld(event.getEntity().getWorld()))
-            return;
-
         if (!TEMPTABLE_SEMI_HOSTILES.contains(event.getEntityType()))
             return;
 
@@ -195,9 +192,6 @@ public class EntityDamageHandler implements Listener
                 }
             }
         }
-
-        //don't track in worlds where claims are not enabled
-        if (!instance.claimsEnabledForWorld(event.damaged().getWorld())) return;
 
         //if the damaged entity is a claimed item frame or armor stand, the damager needs to be a player with build trust in the claim
         if (handleClaimedBuildTrustDamageByEntity(event, attacker, sendMessages)) return;
@@ -835,9 +829,6 @@ public class EntityDamageHandler implements Listener
     {
         //all of this is anti theft code
         if (!instance.config_claims_preventTheft) return;
-
-        //don't track in worlds where claims are not enabled
-        if (!instance.claimsEnabledForWorld(event.getVehicle().getWorld())) return;
 
         //determine which player is attacking, if any
         Player attacker = null;
