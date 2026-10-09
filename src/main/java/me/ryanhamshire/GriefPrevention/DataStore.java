@@ -623,15 +623,6 @@ public abstract class DataStore
         this.deleteClaim(claim, true, false);
     }
 
-    /**
-     * @deprecated Releasing pets is no longer a core feature. Use {@link #deleteClaim(Claim)}.
-     */
-    @Deprecated(forRemoval = true, since = "17.0.0")
-    synchronized public void deleteClaim(Claim claim, boolean releasePets)
-    {
-        this.deleteClaim(claim, true, false);
-    }
-
     synchronized void deleteClaim(Claim claim, boolean fireEvent, boolean ignored)
     {
         //delete any children
