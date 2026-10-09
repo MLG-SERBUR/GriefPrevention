@@ -28,22 +28,20 @@ public class VisualizationEvent extends PlayerEvent
 
     private final @Nullable Visualization visualization;
     private final @NotNull @Unmodifiable Collection<Claim> claims;
-    private final boolean showSubdivides;
     private final boolean visualizingNearbyClaims;
 
     /**
-     * Construct a new {@code VisualizationEvent} for a single {@link Claim} and its children.
+     * Construct a new {@code VisualizationEvent} for a single {@link Claim}.
      *
      * @param player the {@link Player} receiving visuals
      * @param visualization the {@link Visualization} to send
-     * @param claim the {@code Claim} being visualized with subdivisions
+     * @param claim the {@code Claim} being visualized
      */
     public VisualizationEvent(@NotNull Player player, @Nullable Visualization visualization, @NotNull Claim claim)
     {
         super(player);
         this.visualization = visualization;
         this.claims = Collections.singleton(claim);
-        this.showSubdivides = true;
         this.visualizingNearbyClaims = false;
     }
 
@@ -52,7 +50,7 @@ public class VisualizationEvent extends PlayerEvent
      *
      * @param player the {@link Player} receiving visuals
      * @param visualization the {@link Visualization} to send
-     * @param claims the {@code Claims} being visualized without subdivisions
+     * @param claims the {@code Claims} being visualized
      */
     public VisualizationEvent(@NotNull Player player, @Nullable Visualization visualization, @NotNull Collection<Claim> claims)
     {
@@ -64,7 +62,7 @@ public class VisualizationEvent extends PlayerEvent
      *
      * @param player the {@link Player} receiving visuals
      * @param visualization the {@link Visualization} to send
-     * @param claims the {@code Claims} being visualized without subdivisions
+     * @param claims the {@code Claims} being visualized
      * @param visualizingNearbyClaims whether the visualization includes area claims or just the target location
      */
     public VisualizationEvent(@NotNull Player player, @Nullable Visualization visualization, @NotNull Collection<Claim> claims, boolean visualizingNearbyClaims)
@@ -72,7 +70,6 @@ public class VisualizationEvent extends PlayerEvent
         super(player);
         this.visualization = visualization;
         this.claims = Collections.unmodifiableCollection(new HashSet<>(claims));
-        this.showSubdivides = false;
         this.visualizingNearbyClaims = visualizingNearbyClaims;
     }
 
@@ -96,16 +93,6 @@ public class VisualizationEvent extends PlayerEvent
     public @NotNull @Unmodifiable Collection<Claim> getClaims()
     {
         return claims;
-    }
-
-    /**
-     * Check whether {@link Claim} subdivisions (children) are being displayed.
-     *
-     * @return true if subdivisions are displayed
-     */
-    public boolean showSubdivides()
-    {
-        return showSubdivides;
     }
 
     /**
