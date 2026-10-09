@@ -39,13 +39,6 @@ public class ClaimCommand extends CommandHandler
         if (!(sender instanceof Player player))
             return false;
 
-        World world = player.getWorld();
-        if (!plugin.claimsEnabledForWorld(world))
-        {
-            GriefPrevention.sendMessage(player, TextMode.Err, Messages.ClaimsDisabledWorld);
-            return true;
-        }
-
         PlayerData playerData = plugin.dataStore.getPlayerData(player.getUniqueId());
 
         //if he's at the claim count per player limit already and doesn't have permission to bypass, display an error message
@@ -191,15 +184,8 @@ public class ClaimCommand extends CommandHandler
         {
             GriefPrevention.sendMessage(player, TextMode.Success, Messages.CreateClaimSuccess);
 
-            //link to a video demo of land claiming, based on world type
-            if (plugin.creativeRulesApply(player.getLocation()))
-            {
-                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.CreativeBasicsVideo2, DataStore.CREATIVE_VIDEO_URL);
-            }
-            else if (plugin.claimsEnabledForWorld(world))
-            {
-                GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
-            }
+            //link to a video demo of land claiming
+            GriefPrevention.sendMessage(player, TextMode.Instr, Messages.SurvivalBasicsVideo2, DataStore.SURVIVAL_VIDEO_URL);
             BoundaryVisualization.visualizeClaim(player, result.claim, VisualizationType.CLAIM);
             playerData.claimResizing = null;
             playerData.lastShovelLocation = null;

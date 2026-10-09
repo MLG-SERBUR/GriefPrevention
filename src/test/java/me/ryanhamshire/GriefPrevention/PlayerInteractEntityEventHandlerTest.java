@@ -73,7 +73,6 @@ public class PlayerInteractEntityEventHandlerTest
         GriefPrevention.instance = plugin;
 
         World world = mock(World.class);
-        when(plugin.claimsEnabledForWorld(world)).thenReturn(true);
 
         Player player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(PLAYER_ID);
