@@ -46,6 +46,7 @@ public class FlatFileDataStore extends DataStore
 {
     private final static String claimDataFolderPath = dataLayerFolderPath + File.separator + "ClaimData";
     private final static String nextClaimIdFilePath = claimDataFolderPath + File.separator + "_nextClaimID";
+    private final static String schemaVersionFilePath = dataLayerFolderPath + File.separator + "_schemaVersion";
 
     static boolean hasData()
     {
@@ -72,6 +73,12 @@ public class FlatFileDataStore extends DataStore
             newDataStore = true;
             playerDataFolder.mkdirs();
             claimDataFolder.mkdirs();
+        }
+
+        //new data uses the current schema version
+        if (newDataStore)
+        {
+            this.setSchemaVersion(DataStore.latestSchemaVersion);
         }
 
         //load next claim number from file
@@ -468,4 +475,58 @@ public class FlatFileDataStore extends DataStore
     @Override
     synchronized void close() { }
 
+    @Override
+    int getSchemaVersionFromStorage()
+    {
+        File schemaVersionFile = new File(schemaVersionFilePath);
+        if (schemaVersionFile.exists())
+        {
+            BufferedReader inStream = null;
+            try
+            {
+                inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath()));
+                String line = inStream.readLine();
+                return Integer.parseInt(line.trim());
+            }
+            catch (Exception e)
+            {
+                return DataStore.latestSchemaVersion;
+            }
+            finally
+            {
+                try
+                {
+                    if (inStream != null) inStream.close();
+                }
+                catch (IOException exception) {}
+            }
+        }
+        else
+        {
+            this.updateSchemaVersionInStorage(DataStore.latestSchemaVersion);
+            return DataStore.latestSchemaVersion;
+        }
+    }
+
+    @Override
+    void updateSchemaVersionInStorage(int versionToSet)
+    {
+        BufferedWriter outStream = null;
+        try
+        {
+            File schemaVersionFile = new File(schemaVersionFilePath);
+            schemaVersionFile.createNewFile();
+            outStream = new BufferedWriter(new FileWriter(schemaVersionFile));
+            outStream.write(String.valueOf(versionToSet));
+        }
+        catch (Exception e) { }
+        finally
+        {
+            try
+            {
+                if (outStream != null) outStream.close();
+            }
+            catch (IOException exception) {}
+        }
+    }
 }
