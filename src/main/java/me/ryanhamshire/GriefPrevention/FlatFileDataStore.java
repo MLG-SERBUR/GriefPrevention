@@ -481,34 +481,34 @@ public class FlatFileDataStore extends DataStore
     int getSchemaVersionFromStorage()
     {
         File schemaVersionFile = new File(schemaVersionFilePath);
-        if (schemaVersionFile.exists())
+        if (!schemaVersionFile.exists())
         {
-            BufferedReader inStream = null;
-            int schemaVersion = 0;
-            try
-            {
-                inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath()));
+            this.updateSchemaVersionInStorage(0);
+            return 0;
+        }
 
-                //read the version number
-                String line = inStream.readLine();
+        BufferedReader inStream = null;
+        try
+        {
+            inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath()));
 
-                //try to parse into an int value
-                schemaVersion = Integer.parseInt(line);
-            }
-            catch (Exception e) { }
+            //read the version number
+            String line = inStream.readLine();
 
+            //try to parse into an int value
+            return Integer.parseInt(line.trim());
+        }
+        catch (Exception e)
+        {
+            return 0;
+        }
+        finally
+        {
             try
             {
                 if (inStream != null) inStream.close();
             }
             catch (IOException exception) {}
-
-            return schemaVersion;
-        }
-        else
-        {
-            this.updateSchemaVersionInStorage(0);
-            return 0;
         }
     }
 
@@ -532,13 +532,15 @@ public class FlatFileDataStore extends DataStore
         {
             GriefPrevention.AddLogEntry("Unexpected exception saving schema version: " + e.getMessage());
         }
-
-        //close the file
-        try
+        finally
         {
-            if (outStream != null) outStream.close();
+            //close the file
+            try
+            {
+                if (outStream != null) outStream.close();
+            }
+            catch (IOException exception) {}
         }
-        catch (IOException exception) {}
 
     }
 }
