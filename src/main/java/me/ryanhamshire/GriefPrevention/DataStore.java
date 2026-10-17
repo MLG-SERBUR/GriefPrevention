@@ -94,9 +94,14 @@ public abstract class DataStore
     protected static final int latestSchemaVersion = 3;
 
     //reading and writing the schema version to the data store
-    abstract int getSchemaVersionFromStorage();
+    int getSchemaVersionFromStorage()
+    {
+        return latestSchemaVersion;
+    }
 
-    abstract void updateSchemaVersionInStorage(int versionToSet);
+    void updateSchemaVersionInStorage(int versionToSet)
+    {
+    }
 
     //current version of the schema of data in secondary storage
     private int currentSchemaVersion = -1;  //-1 means not determined yet
