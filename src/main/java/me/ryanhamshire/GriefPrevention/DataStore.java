@@ -1275,16 +1275,7 @@ public abstract class DataStore
         for (Messages message : messageIDs)
         {
             String messagePath = "Messages." + message.name();
-            // If available, migrate legacy path.
-            if (config.isString(messagePath + ".Text"))
-            {
-                this.messages[message.ordinal()] = config.getString(messagePath + ".Text", message.defaultValue);
-            }
-            // Otherwise prefer current value if available.
-            else
-            {
-                this.messages[message.ordinal()] = config.getString(messagePath, message.defaultValue);
-            }
+            this.messages[message.ordinal()] = config.getString(messagePath, message.defaultValue);
             config.set(messagePath, this.messages[message.ordinal()]);
 
             //support color codes
@@ -1293,16 +1284,9 @@ public abstract class DataStore
                 this.messages[message.ordinal()] = this.messages[message.ordinal()].replace('$', (char) 0x00A7);
             }
 
-            if (message.notes != null)
+            if (message.notes != null && config.getComments(messagePath).isEmpty())
             {
-                // Import old non-comment notes.
-                String notesString = config.getString(messagePath + ".Notes", message.notes);
-                // Import existing comment notes.
-                List<String> notes = config.getComments(messagePath);
-                if (notes.isEmpty()) {
-                    notes = List.of(notesString);
-                }
-                config.setComments(messagePath, notes);
+                config.setComments(messagePath, List.of(message.notes));
             }
         }
 
