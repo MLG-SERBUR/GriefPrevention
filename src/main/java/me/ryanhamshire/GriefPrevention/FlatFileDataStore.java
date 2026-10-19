@@ -35,13 +35,11 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 
 //manages data stored in the file system
 public class FlatFileDataStore extends DataStore
@@ -49,13 +47,6 @@ public class FlatFileDataStore extends DataStore
     private final static String claimDataFolderPath = dataLayerFolderPath + File.separator + "ClaimData";
     private final static String nextClaimIdFilePath = claimDataFolderPath + File.separator + "_nextClaimID";
     private final static String schemaVersionFilePath = dataLayerFolderPath + File.separator + "_schemaVersion";
-
-    static boolean hasData()
-    {
-        File claimsDataFolder = new File(claimDataFolderPath);
-
-        return claimsDataFolder.exists();
-    }
 
     //initialization!
     FlatFileDataStore() throws Exception
@@ -481,32 +472,24 @@ public class FlatFileDataStore extends DataStore
         File schemaVersionFile = new File(schemaVersionFilePath);
         if (schemaVersionFile.exists())
         {
-            BufferedReader inStream = null;
-            int schemaVersion = 0;
-            try
+            try (BufferedReader inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath())))
             {
-                inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath()));
-
                 //read the version number
                 String line = inStream.readLine();
 
                 //try to parse into an int value
-                schemaVersion = Integer.parseInt(line);
+                return Integer.parseInt(line.trim());
             }
-            catch (Exception e) { }
-
-            try
+            //unreadable or corrupt version counts as current, there's no migration to run
+            catch (Exception e)
             {
-                if (inStream != null) inStream.close();
+                return DataStore.latestSchemaVersion;
             }
-            catch (IOException exception) {}
-
-            return schemaVersion;
         }
         else
         {
-            this.updateSchemaVersionInStorage(0);
-            return 0;
+            this.updateSchemaVersionInStorage(DataStore.latestSchemaVersion);
+            return DataStore.latestSchemaVersion;
         }
     }
 
