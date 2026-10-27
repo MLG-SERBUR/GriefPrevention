@@ -65,10 +65,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.UUID;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
@@ -2730,45 +2728,6 @@ public class GriefPrevention extends JavaPlugin
     {
         Supplier<String> result = ProtectionHelper.checkPermission(player, location, ClaimPermission.Build, breakEvent);
         return result == null ? null : result.get();
-    }
-
-    private Set<Material> parseMaterialListFromConfig(List<String> stringsToParse)
-    {
-        Set<Material> materials = new HashSet<>();
-
-        //for each string in the list
-        for (int i = 0; i < stringsToParse.size(); i++)
-        {
-            String string = stringsToParse.get(i);
-
-            //defensive coding
-            if (string == null) continue;
-
-            //try to parse the string value into a material
-            Material material = Material.getMaterial(string.toUpperCase());
-
-            //null value returned indicates an error parsing the string from the config file
-            if (material == null)
-            {
-                //check if string has failed validity before
-                if (!string.contains("can't"))
-                {
-                    //update string, which will go out to config file to help user find the error entry
-                    stringsToParse.set(i, string + "     <-- can't understand this entry, see BukkitDev documentation");
-
-                    //warn about invalid material in log
-                    GriefPrevention.AddLogEntry(String.format("ERROR: Invalid material %s.  Please update your config.yml.", string));
-                }
-            }
-
-            //otherwise material is valid, add it
-            else
-            {
-                materials.add(material);
-            }
-        }
-
-        return materials;
     }
 
     public int getSeaLevel(World world)

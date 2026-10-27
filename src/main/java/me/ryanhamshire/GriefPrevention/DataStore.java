@@ -57,7 +57,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 //singleton class which manages all GriefPrevention data (except for config options)
@@ -75,9 +74,6 @@ public abstract class DataStore
 
     //in-memory cache for messages
     private String[] messages;
-
-    //pattern for unique user identifiers (UUIDs)
-    protected final static Pattern uuidpattern = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
     //next claim ID
     Long nextClaimID = (long) 0;
