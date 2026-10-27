@@ -465,7 +465,7 @@ public class FlatFileDataStore extends DataStore
         if (schemaVersionFile.exists())
         {
             BufferedReader inStream = null;
-            int schemaVersion = 0;
+            int schemaVersion = DataStore.latestSchemaVersion;
             try
             {
                 inStream = new BufferedReader(new FileReader(schemaVersionFile.getAbsolutePath()));
@@ -476,7 +476,11 @@ public class FlatFileDataStore extends DataStore
                 //try to parse into an int value
                 schemaVersion = Integer.parseInt(line);
             }
-            catch (Exception e) { }
+            catch (Exception e)
+            {
+                //unreadable or corrupt version counts as current, there is no migration to run
+                schemaVersion = DataStore.latestSchemaVersion;
+            }
 
             try
             {
@@ -488,8 +492,8 @@ public class FlatFileDataStore extends DataStore
         }
         else
         {
-            this.updateSchemaVersionInStorage(0);
-            return 0;
+            this.updateSchemaVersionInStorage(DataStore.latestSchemaVersion);
+            return DataStore.latestSchemaVersion;
         }
     }
 
