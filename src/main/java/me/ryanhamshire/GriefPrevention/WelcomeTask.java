@@ -59,7 +59,6 @@ public class WelcomeTask implements Runnable
 
             page2.append("/IgnorePlayer\n\n");
 
-            page2.append("/SubdivideClaims\n");
             page2.append("/AccessTrust\n");
             page2.append("/ContainerTrust\n");
             page2.append("/ManageTrust");

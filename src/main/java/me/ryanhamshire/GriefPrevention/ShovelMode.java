@@ -22,6 +22,5 @@ package me.ryanhamshire.GriefPrevention;
 public enum ShovelMode
 {
     Basic,
-    Admin,
-    Subdivide
+    Admin
 }
