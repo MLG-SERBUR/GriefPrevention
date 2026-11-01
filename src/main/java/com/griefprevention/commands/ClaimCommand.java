@@ -173,7 +173,7 @@ public class ClaimCommand extends CommandHandler
                 lesser.getBlockY() - plugin.config_claims_claimsExtendIntoGroundDistance - 1,
                 world.getHighestBlockYAt(greater) - plugin.config_claims_claimsExtendIntoGroundDistance - 1,
                 lesser.getBlockZ(), greater.getBlockZ(),
-                ownerId, null, null, player);
+                ownerId, null, player);
         if (!result.succeeded || result.claim == null)
         {
             if (result.claim != null)
