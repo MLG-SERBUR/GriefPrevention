@@ -123,12 +123,12 @@ public class ClaimPermissionCheckEvent extends ClaimEvent implements Cancellable
     }
 
     /**
-     * @deprecated If cancelling, {@link #setDenialReason(Supplier)} is preferred.
+     * Cancellable implementation. If cancelling, {@link #setDenialReason(Supplier)} is preferred.
+     * This method cannot be removed: the class implements Cancellable, which requires it.
      *
      * @param cancelled whether the event is cancelled
      */
     @Override
-    @Deprecated
     public void setCancelled(boolean cancelled)
     {
         if (!cancelled)
